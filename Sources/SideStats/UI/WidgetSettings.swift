@@ -5,6 +5,7 @@ struct WidgetSettings: View {
     @EnvironmentObject var widgets: WidgetStore
     @State private var selection: String?
     @State private var showImport = false
+    @State private var showGallery = false
 
     var body: some View {
         HSplitView {
@@ -18,8 +19,11 @@ struct WidgetSettings: View {
                 Divider()
                 HStack(spacing: 2) {
                     Menu {
+                        Button("Browse integrations…") { showGallery = true }
+                        Divider()
                         Button("HTTP API") { add(.http) }
                         Button("Shell command") { add(.command) }
+                        Button("Push (API / MCP)") { add(.push) }
                         Divider()
                         Button("Import JSON…") { showImport = true }
                     } label: { Image(systemName: "plus") }
@@ -47,6 +51,9 @@ struct WidgetSettings: View {
                         Text("Modules").font(.title3.weight(.semibold))
                         Text("Add any API or shell command as a sidebar module. Return the SideStats format for full control, or plain JSON and SideStats picks stats, charts or lists for you.")
                             .multilineTextAlignment(.center).foregroundStyle(.secondary).frame(maxWidth: 360)
+                        Button("Browse integrations…") { showGallery = true }.buttonStyle(.borderedProminent)
+                        Text("Grafana, Prometheus, Uptime Kuma, Docker, SSH servers, GitHub, Stripe and \(max(WidgetPresets.all.count - 7, 0)) more.")
+                            .font(.caption).foregroundStyle(.secondary)
                         Link("Widget format reference ↗", destination: URL(string: Links.repo + "/blob/main/WIDGETS.md")!)
                     }
                     .padding().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -55,6 +62,7 @@ struct WidgetSettings: View {
             .frame(minWidth: 440, maxWidth: .infinity, maxHeight: .infinity)
         }
         .sheet(isPresented: $showImport) { ImportSheet { selection = $0 } }
+        .sheet(isPresented: $showGallery) { PresetGallery { selection = $0 } }
     }
 
     private func row(_ id: String) -> some View {
@@ -100,8 +108,11 @@ struct WidgetSettings: View {
     private func add(_ source: WidgetSourceType) {
         var w = WidgetConfig()
         w.source = source
-        w.name = source == .http ? "New API widget" : "New command widget"
-        w.icon = source == .http ? "network" : "terminal"
+        switch source {
+        case .http: w.name = "New API widget"; w.icon = "network"
+        case .command: w.name = "New command widget"; w.icon = "terminal"
+        case .push: w.name = "Pushed data"; w.icon = "arrow.down.circle"
+        }
         if source == .command {
             w.command = #"echo '{"items":[{"type":"stat","label":"Hello","value":42}]}'"#
             w.refreshSeconds = 60
@@ -147,10 +158,18 @@ struct WidgetEditor: View {
                     Picker("Source", selection: $draft.source) {
                         ForEach(WidgetSourceType.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Refresh every", selection: $draft.refreshSeconds) {
+                    if draft.source != .push { Picker("Refresh every", selection: $draft.refreshSeconds) {
                         ForEach(Self.intervals, id: \.0) { Text($0.1).tag($0.0) }
                         if !Self.intervals.contains(where: { $0.0 == draft.refreshSeconds }) {
                             Text("\(draft.refreshSeconds) sec").tag(draft.refreshSeconds)
+                        }
+                    } }
+                    if !draft.preset.isEmpty, let p = WidgetPresets.preset(draft.preset) {
+                        LabeledContent("Integration") {
+                            HStack(spacing: 6) {
+                                Text(p.name).foregroundStyle(.secondary)
+                                if let u = URL(string: p.docs), !p.docs.isEmpty { Link("Docs ↗", destination: u) }
+                            }
                         }
                     }
                 }
@@ -170,6 +189,8 @@ struct WidgetEditor: View {
                         Text("Headers are stored in the Keychain and never exported. Placeholders: {{today}}, {{daysAgo:N}}, {{monthStart}}.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
+                } else if draft.source == .push {
+                    pushSection
                 } else {
                     Section {
                         code($draft.command, placeholder: "curl -s … | jq …", height: 70)
@@ -191,6 +212,15 @@ struct WidgetEditor: View {
                 } header: { Text("Data") } footer: {
                     Text("Auto renders the SideStats format as-is; plain JSON becomes stats (numbers/objects), charts (number arrays or rows with a date) or lists (other arrays).")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                Section {
+                    code($draft.transform, placeholder: "data => ({ items: [ item.stat('Users', data.users) ] })", height: draft.transform.isEmpty ? 44 : 150)
+                } header: { Text("Transform (JavaScript)") } footer: {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Optional. Receives the response as `data` and returns SideStats items or JSON. Helpers: `item.stat/chart/list/status…`, `fmt.num/money/pct/bytes/ago`, `sum`, `avg`, `groupBy`, `sortBy`, `lines`. Runs before JSON path.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Link("Reference ↗", destination: URL(string: Links.repo + "/blob/main/WIDGETS.md#transforms-javascript")!).font(.caption)
+                    }
                 }
                 Section {
                     if testing { ProgressView().controlSize(.small) }
@@ -238,6 +268,44 @@ struct WidgetEditor: View {
         .onAppear {
             if let s = widgets.states[original.id], !s.items.isEmpty { preview = s.items } else { test() }
         }
+    }
+
+    private var pushExample: String {
+        "curl -X POST \(LocalAPIServer.baseURL)/v1/widgets/\(draft.id)/data \\\n" +
+        "  -H 'Authorization: Bearer <token from Settings → API & MCP>' \\\n" +
+        "  -H 'Content-Type: application/json' \\\n" +
+        "  -d '{\"items\":[{\"type\":\"stat\",\"label\":\"Signups\",\"value\":42}]}'"
+    }
+
+    private var pushSection: some View {
+        Section {
+            LabeledContent("Widget ID") {
+                HStack(spacing: 6) {
+                    Text(draft.id).font(.system(size: 11, design: .monospaced)).textSelection(.enabled).lineLimit(1)
+                    Button { copy(draft.id) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.borderless).help("Copy ID")
+                }
+            }
+            Text(pushExample).font(.system(size: 10.5, design: .monospaced)).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+            HStack {
+                Button("Copy example") { copy(pushExample) }
+                Button("Copy with my token") {
+                    let token = LocalAPIServer.shared?.token ?? ""
+                    copy(pushExample.replacingOccurrences(of: "<token from Settings → API & MCP>", with: token.isEmpty ? "<token>" : token))
+                }
+                .help("Copies the command with your local API token filled in")
+            }
+            .controlSize(.small)
+        } header: { Text("Push") } footer: {
+            Text("Nothing is fetched: scripts, cron jobs, CI or AI agents (through the SideStats MCP server) send data whenever they like. Any JSON works: the SideStats format, or plain JSON shaped with a transform below.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func copy(_ s: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(s, forType: .string)
     }
 
     private func code(_ text: Binding<String>, placeholder: String, height: CGFloat) -> some View {

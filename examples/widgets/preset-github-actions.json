@@ -1,0 +1,17 @@
+{
+  "body" : "",
+  "command" : "",
+  "display" : "auto",
+  "enabled" : true,
+  "fields" : "",
+  "icon" : "play.circle",
+  "jsonPath" : "",
+  "method" : "GET",
+  "name" : "swiftlang/swift · CI",
+  "preset" : "github-actions",
+  "refreshSeconds" : 120,
+  "sidestats" : 1,
+  "source" : "http",
+  "transform" : "const branch = \"\";\nconst runs = (data.workflow_runs || []).filter(r => !branch || r.head_branch === branch);\nif (!runs.length) return [item.text('No workflow runs' + (branch ? ' on ' + branch : ''), 'caption')];\nconst word = r => r.status !== 'completed' ? (r.status === 'queued' ? 'queued' : 'running') : r.conclusion;\nconst STATE = { success: 'ok', failure: 'error', timed_out: 'error', startup_failure: 'error', action_required: 'warn', running: 'warn', queued: 'warn' };\nconst COLOR = { ok: 'green', error: 'red', warn: 'orange' };\nconst dur = r => (toDate(r.updated_at) - toDate(r.run_started_at || r.created_at)) / 1000;\nconst done = runs.filter(r => r.status === 'completed' && !['cancelled', 'skipped', 'neutral'].includes(r.conclusion));\nconst rate = done.length ? count(done, r => r.conclusion === 'success') / done.length : null;\nconst latest = Object.values(groupBy(runs, 'name')).map(g => g[0]).slice(0, 6);\nreturn [\n  item.stat('Success rate', rate === null ? '—' : rate, { format: 'percent', decimals: 0, color: rate === null ? undefined : rate >= 0.9 ? 'green' : rate >= 0.7 ? 'orange' : 'red', caption: 'last ' + done.length + ' runs' }),\n  item.stat('Typical run', done.length ? sortBy(done.map(dur), null)[Math.floor(done.length / 2)] : '—', { format: 'duration', caption: 'median' }),\n  ...latest.map(r => item.status(r.name, STATE[word(r)] || 'info', word(r).replace('_', ' ') + ' · ' + fmt.ago(r.created_at))),\n  item.list('Recent runs', runs.slice(0, 10).map(r => ({\n    title: r.display_title || r.name, subtitle: [r.display_title && r.display_title !== r.name ? r.name : null, r.head_branch, fmt.ago(r.created_at)].filter(Boolean).join(' · '),\n    value: r.status === 'completed' ? fmt.duration(dur(r)) : word(r), valueColor: COLOR[STATE[word(r)]] || 'secondary',\n    icon: { ok: 'sf:checkmark.circle.fill', error: 'sf:xmark.circle.fill', warn: 'sf:clock.fill' }[STATE[word(r)]] || 'sf:minus.circle',\n    url: r.html_url })), { limit: 5 })\n];",
+  "url" : "https://api.github.com/repos/swiftlang/swift/actions/runs?per_page=30"
+}

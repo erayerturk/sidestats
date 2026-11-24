@@ -1,0 +1,17 @@
+{
+  "body" : "",
+  "command" : "",
+  "display" : "auto",
+  "enabled" : true,
+  "fields" : "",
+  "icon" : "cloud.sun",
+  "jsonPath" : "",
+  "method" : "GET",
+  "name" : "Istanbul",
+  "preset" : "weather",
+  "refreshSeconds" : 900,
+  "sidestats" : 1,
+  "source" : "http",
+  "transform" : "if (data.error) throw new Error(data.reason || 'Weather request failed');\nconst W = c => c === 0 ? ['Clear', 'sun.max.fill'] : c <= 2 ? ['Partly cloudy', 'cloud.sun.fill'] : c === 3 ? ['Overcast', 'cloud.fill']\n  : c <= 48 ? ['Fog', 'cloud.fog.fill'] : c <= 57 ? ['Drizzle', 'cloud.drizzle.fill'] : c <= 67 ? ['Rain', 'cloud.rain.fill']\n  : c <= 77 ? ['Snow', 'cloud.snow.fill'] : c <= 82 ? ['Showers', 'cloud.heavyrain.fill'] : c <= 86 ? ['Snow showers', 'cloud.snow.fill'] : ['Thunderstorm', 'cloud.bolt.rain.fill'];\nconst cur = data.current || {}, u = (data.current_units || {}).temperature_2m || '°';\nconst h = data.hourly || {}, d = data.daily || {};\nconst nowIdx = Math.max(0, (h.time || []).findIndex(t => t >= String(cur.time || '').slice(0, 13)));\nconst off = (data.utc_offset_seconds || 0) * 1000;\nconst next = (h.time || []).slice(nowIdx, nowIdx + 24).map((t, i) => [new Date(t + ':00Z').getTime() - off, h.temperature_2m[nowIdx + i]]);\nconst rain = max((h.precipitation_probability || []).slice(nowIdx, nowIdx + 12));\nconst days = (d.time || []).map((t, i) => ({ t, code: d.weather_code[i], hi: d.temperature_2m_max[i], lo: d.temperature_2m_min[i], p: d.precipitation_probability_max[i] }));\nreturn [\n  item.stat(W(cur.weather_code)[0], Math.round(cur.temperature_2m), { unit: u,\n    caption: 'Feels ' + Math.round(cur.apparent_temperature) + u + ' · ' + cur.relative_humidity_2m + '% · wind ' + Math.round(cur.wind_speed_10m) + ' km/h' + (rain ? ' · rain ' + rain + '%' : '') }),\n  next.length ? item.chart(null, next, { kind: 'area', height: 70, color: 'orange' }) : null,\n  item.list(null, days.slice(1).map(x => ({\n    title: new Date(x.t + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),\n    subtitle: W(x.code)[0] + (x.p ? ' · ' + x.p + '% rain' : ''), value: Math.round(x.hi) + '° / ' + Math.round(x.lo) + '°', icon: 'sf:' + W(x.code)[1] })), { limit: 3 })\n];",
+  "url" : "https://api.open-meteo.com/v1/forecast?latitude=41.01&longitude=28.98&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=4&temperature_unit=celsius"
+}

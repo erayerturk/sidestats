@@ -1,0 +1,17 @@
+{
+  "body" : "",
+  "command" : "",
+  "display" : "auto",
+  "enabled" : true,
+  "fields" : "",
+  "icon" : "exclamationmark.bubble",
+  "jsonPath" : "",
+  "method" : "GET",
+  "name" : "Status",
+  "preset" : "statuspage",
+  "refreshSeconds" : 300,
+  "sidestats" : 1,
+  "source" : "http",
+  "transform" : "const page = data.page || {}, st = data.status || {};\nconst IND = { none: 'ok', minor: 'warn', major: 'error', critical: 'error', maintenance: 'info' };\nconst COMP = { operational: 'ok', degraded_performance: 'warn', partial_outage: 'warn', major_outage: 'error', under_maintenance: 'info' };\nconst comps = (data.components || []).filter(c => !c.group && c.showcase !== false);\nconst bad = comps.filter(c => c.status !== 'operational');\nconst incidents = (data.incidents || []).filter(i => i.status !== 'resolved' && i.status !== 'postmortem');\nconst maint = (data.scheduled_maintenances || []).filter(m => m.status === 'in_progress');\nreturn [\n  item.status(page.name || 'Status', IND[st.indicator] || 'info', st.description || st.indicator),\n  ...bad.slice(0, 8).map(c => item.status(c.name, COMP[c.status] || 'info', c.status.replace(/_/g, ' '))),\n  incidents.length ? item.list('Incidents', incidents.map(i => ({ title: i.name, subtitle: i.status + ' · ' + fmt.ago(i.started_at || i.created_at),\n    value: i.impact, valueColor: { minor: 'orange', major: 'red', critical: 'red' }[i.impact] || 'secondary', url: i.shortlink })), { limit: 4 }) : null,\n  maint.length ? item.list('Maintenance', maint.map(m => ({ title: m.name, subtitle: 'until ' + fmt.date(m.scheduled_until, true),\n    icon: 'sf:wrench.and.screwdriver', url: m.shortlink })), { limit: 3 }) : null,\n  !bad.length && !incidents.length ? item.text(comps.length + ' components operational', 'caption') : null\n];",
+  "url" : "https://www.githubstatus.com/api/v2/summary.json"
+}

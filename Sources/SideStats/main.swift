@@ -2,6 +2,12 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
+// `SideStats --mcp`: run as a stdio MCP server (bridge to the running app's local API). Must run
+// before NSApplication is created; nothing but protocol messages may be written to stdout.
+if CommandLine.arguments.dropFirst().contains("--mcp") {
+    MCPServer.run()
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = MetricsStore()
@@ -14,9 +20,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeyRef: EventHotKeyRef?
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        api = LocalAPIServer(widgets: widgets, todos: todos)
-        api.start()
+        api = LocalAPIServer(widgets: widgets, todos: todos, store: store)
         edge = EdgePanelController(store: store, widgets: widgets, todos: todos, openSettings: { [weak self] in self?.openSettings(tab: $0) })
+        api.panelControl = { [weak self] action in
+            guard let edge = self?.edge else { return [:] }
+            switch action {
+            case "show": edge.show()
+            case "hide": edge.isPinned = false; edge.hide()
+            case "toggle": edge.toggle()
+            case "pin": edge.isPinned = true; edge.show()
+            case "unpin": edge.isPinned = false
+            default: break
+            }
+            return ["visible": edge.isVisible, "pinned": edge.isPinned]
+        }
+        api.start()
         setupStatusItem()
         registerHotKey()
         if store.hasAnySource { Task { await store.refresh() } }
@@ -24,6 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaults.standard.set(true, forKey: "onboarded")
             edge.show()
         }
+    }
+
+    func applicationWillTerminate(_ note: Notification) {
+        api?.stop()
     }
 
     private func setupStatusItem() {
@@ -58,7 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let tab { UserDefaults.standard.set(tab.rawValue, forKey: "settingsTab") }
         if settingsWindow == nil {
             let w = NSWindow(contentViewController: NSHostingController(
-                rootView: SettingsView().environmentObject(store).environmentObject(widgets).environmentObject(todos)))
+                rootView: SettingsView().environmentObject(store).environmentObject(widgets).environmentObject(todos)
+                    .environmentObject(api)))
             w.title = "SideStats Settings"
             w.styleMask = [.titled, .closable, .miniaturizable]
             w.isReleasedWhenClosed = false

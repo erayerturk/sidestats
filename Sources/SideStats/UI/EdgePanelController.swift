@@ -72,9 +72,6 @@ final class EdgePanelController: ObservableObject {
             monitors.append(m)
         }
         // Mouse-moved events stop when the cursor rests; a slow timer completes dwell/leave checks.
-        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.mouseMoved() }
-        }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { if self?.isVisible == true { self?.show(animated: false) } }
@@ -92,7 +89,22 @@ final class EdgePanelController: ObservableObject {
         return NSRect(x: x, y: vf.minY + margin, width: Self.width, height: vf.height - margin * 2)
     }
 
+    /// Mouse-moved events stop when the cursor rests, so a short timer finishes dwell / leave
+    /// checks. It only runs while such a check is pending, keeping idle CPU at ~0.
+    private var pollTimer: Timer?
+    private func updatePolling() {
+        let needed = edgeSince != nil || outsideSince != nil
+        if needed && pollTimer == nil {
+            pollTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.mouseMoved() }
+            }
+        } else if !needed {
+            pollTimer?.invalidate(); pollTimer = nil
+        }
+    }
+
     private func mouseMoved() {
+        defer { updatePolling() }
         let p = NSEvent.mouseLocation
         if !isVisible {
             guard let s = screen(at: p) else { return }
@@ -112,7 +124,8 @@ final class EdgePanelController: ObservableObject {
             }
         } else if !isPinned && store.config.autoHide {
             let inside = panel.frame.insetBy(dx: -24, dy: -24).contains(p) || p.x >= (currentScreen?.frame.maxX ?? .infinity) - 2
-            if inside || panel.attachedSheet != nil || NSApp.modalWindow != nil {
+            let editingText = panel.isKeyWindow && panel.firstResponder is NSTextView
+            if inside || editingText || panel.attachedSheet != nil || NSApp.modalWindow != nil {
                 outsideSince = nil
             } else {
                 outsideSince = outsideSince ?? Date()
@@ -127,6 +140,7 @@ final class EdgePanelController: ObservableObject {
         let s = currentScreen ?? screen(at: NSEvent.mouseLocation) ?? NSScreen.main!
         currentScreen = s
         outsideSince = nil
+        edgeSince = nil
         if !isVisible { panel.setFrame(targetFrame(on: s, shown: false), display: false) }
         panel.orderFrontRegardless()
         isVisible = true

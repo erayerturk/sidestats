@@ -1,0 +1,17 @@
+{
+  "body" : "",
+  "command" : "c=''; d() { if [[ -n $c ]]; then docker --context \"$c\" \"$@\"; else docker \"$@\"; fi; }\nd ps -a --format '{{json .}}' 2>&1; print -- '---stats'; d stats --no-stream --format '{{json .}}' 2>/dev/null",
+  "display" : "auto",
+  "enabled" : true,
+  "fields" : "",
+  "icon" : "shippingbox",
+  "jsonPath" : "",
+  "method" : "GET",
+  "name" : "Docker",
+  "preset" : "docker-containers",
+  "refreshSeconds" : 30,
+  "sidestats" : 1,
+  "source" : "command",
+  "transform" : "const text = String(data ?? '');\nconst [psPart, statsPart = ''] = text.split('---stats');\nconst cs = jsonLines(psPart), stats = jsonLines(statsPart);\nif (!cs.length) {\n  const err = lines(psPart)[0];\n  return err ? [item.error('Docker', /daemon|connect/i.test(err) ? 'Docker is not running' : err.slice(0, 120))] : [item.text('No containers', 'caption')];\n}\nconst st = Object.fromEntries(stats.map(s => [s.Name, s]));\nconst health = c => /unhealthy/.test(c.Status) ? 'unhealthy' : /healthy/.test(c.Status) ? 'healthy' : /starting/.test(c.Status) ? 'starting' : '';\nconst bad = c => c.State === 'restarting' || c.State === 'dead' || health(c) === 'unhealthy' || (c.State === 'exited' && !/Exited \\(0\\)/.test(c.Status));\nconst running = cs.filter(c => c.State === 'running');\nconst rank = c => bad(c) ? 0 : c.State === 'running' ? 1 : 2;\nreturn [\n  item.stat('Running', running.length, { color: 'green' }),\n  item.stat('Stopped', cs.length - running.length, { color: cs.length - running.length ? 'secondary' : undefined }),\n  item.stat('Problems', count(cs, bad), { color: count(cs, bad) ? 'red' : 'secondary' }),\n  item.list(null, sortBy(cs, c => rank(c) + c.Names.toLowerCase().padStart(1)).map(c => {\n    const s = st[c.Names];\n    return {\n      title: c.Names,\n      subtitle: c.Image.replace(/^.*\\//, '').slice(0, 28) + ' · ' + c.Status.replace(/ \\((un)?healthy\\)/, ''),\n      value: s && c.State === 'running' ? s.CPUPerc + ' · ' + String(s.MemUsage).split(' / ')[0] : (health(c) || c.State),\n      valueColor: bad(c) ? 'red' : c.State === 'running' ? 'green' : 'secondary',\n      icon: bad(c) ? 'sf:exclamationmark.triangle.fill' : c.State === 'running' ? 'sf:shippingbox.fill' : 'sf:shippingbox'\n    };\n  }), { limit: 12 })\n];",
+  "url" : ""
+}

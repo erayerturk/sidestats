@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum SettingsTab: String {
-    case general, widgets, appStore, google, searchAds, meta
+    case general, widgets, appStore, google, searchAds, meta, api
 }
 
 struct SettingsView: View {
@@ -18,6 +18,7 @@ struct SettingsView: View {
             GoogleSettings().tabItem { Label("Google", systemImage: "g.circle") }.tag(SettingsTab.google.rawValue)
             SearchAdsSettings().tabItem { Label("Search Ads", systemImage: "magnifyingglass") }.tag(SettingsTab.searchAds.rawValue)
             MetaSettings().tabItem { Label("Meta Ads", systemImage: "m.circle") }.tag(SettingsTab.meta.rawValue)
+            APISettings().tabItem { Label("API & MCP", systemImage: "terminal") }.tag(SettingsTab.api.rawValue)
         }
         .frame(width: 720, height: 560)
     }
@@ -305,5 +306,133 @@ struct MetaSettings: View {
             SourceFooter(kinds: [.metaAds], docs: docsBase + "meta-ads")
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - API & MCP
+
+struct APISettings: View {
+    @EnvironmentObject var api: LocalAPIServer
+    @State private var showToken = false
+    @State private var confirmRegenerate = false
+    @State private var copied: String?
+
+    private var exe: String { AppVersion.executablePath }
+    private var base: String { "http://127.0.0.1:\(api.port ?? LocalAPIServer.defaultPort)" }
+    private var claudeCode: String { "claude mcp add sidestats -- \"\(exe)\" --mcp" }
+    private var desktopJSON: String {
+        let path = exe.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        return """
+        {
+          "mcpServers": {
+            "sidestats": {
+              "command": "\(path)",
+              "args": ["--mcp"]
+            }
+          }
+        }
+        """
+    }
+    private var tokenLine: String {
+        "export SIDESTATS_TOKEN=$(plutil -extract token raw ~/Library/Application\\ Support/SideStats/api.json)"
+    }
+    private var curlWidget: String {
+        """
+        curl -s \(base)/v1/widgets -H "Authorization: Bearer $SIDESTATS_TOKEN" \\
+          -d '{"name":"Deploys","icon":"shippingbox","source":"push"}'
+        """
+    }
+    private var curlPush: String {
+        """
+        curl -s \(base)/v1/widgets/<id>/data -H "Authorization: Bearer $SIDESTATS_TOKEN" \\
+          -d '{"items":[{"type":"stat","label":"Today","value":12},{"type":"status","label":"CI","state":"ok"}]}'
+        """
+    }
+    private var curlTodo: String {
+        """
+        curl -s \(base)/v1/todos -H "Authorization: Bearer $SIDESTATS_TOKEN" \\
+          -d '{"title":"Renew certificate","due":"2026-12-01","priority":"high"}'
+        """
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Local API") {
+                    HStack(spacing: 6) {
+                        Circle().fill(api.isRunning ? Color.green : Color.red).frame(width: 8, height: 8)
+                        Text(api.isRunning ? "Running on \(base)" : (api.lastError ?? "Not running"))
+                            .textSelection(.enabled)
+                    }
+                }
+                LabeledContent("Token") {
+                    HStack {
+                        Text(showToken ? api.token : String(repeating: "•", count: 24))
+                            .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                            .lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        Button(showToken ? "Hide" : "Show") { showToken.toggle() }
+                        Button(copied == "token" ? "Copied" : "Copy") { copy(api.token, "token") }
+                        Button("Regenerate…") { confirmRegenerate = true }
+                    }
+                    .controlSize(.small)
+                }
+            } header: {
+                Text("Local API")
+            } footer: {
+                Text("Listens on 127.0.0.1 only. Every request needs the token; browser requests (Origin header) are refused. The token is stored in ~/Library/Application Support/SideStats/api.json (readable only by you), which is how the MCP server finds it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                snippet("Claude Code", claudeCode, id: "cc")
+                snippet("Claude Desktop / Cursor", desktopJSON, id: "json")
+                Text("Claude Desktop: Settings → Developer → Edit Config (claude_desktop_config.json). Cursor: ~/.cursor/mcp.json. The MCP server starts SideStats when it isn't running.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("MCP server")
+            } footer: {
+                Text("Agents can create widgets, push data, manage tasks, read revenue, show notifications and open the sidebar. Command widgets run shell commands as you — review what an agent adds.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("curl") {
+                snippet("Token", tokenLine, id: "tok")
+                snippet("Create a push widget", curlWidget, id: "w")
+                snippet("Push data", curlPush, id: "push")
+                snippet("Add a task", curlTodo, id: "todo")
+                Link("API reference ↗", destination: URL(string: Links.repo + "#automation-local-api--mcp")!)
+                    .font(.caption)
+            }
+        }
+        .formStyle(.grouped)
+        .confirmationDialog("Regenerate the API token?", isPresented: $confirmRegenerate) {
+            Button("Regenerate", role: .destructive) { api.regenerateToken() }
+        } message: {
+            Text("Scripts using the old token stop working. The MCP server picks up the new token automatically.")
+        }
+    }
+
+    private func snippet(_ title: String, _ text: String, id: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title).font(.callout.weight(.medium))
+                Spacer()
+                Button(copied == id ? "Copied" : "Copy") { copy(text, id) }.controlSize(.small)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(text).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    .fixedSize(horizontal: true, vertical: true)
+            }
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 5).fill(.quaternary.opacity(0.5)))
+        }
+    }
+
+    private func copy(_ s: String, _ id: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(s, forType: .string)
+        copied = id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { if copied == id { copied = nil } }
     }
 }

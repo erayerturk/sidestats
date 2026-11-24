@@ -1,0 +1,17 @@
+{
+  "body" : "",
+  "command" : "",
+  "display" : "auto",
+  "enabled" : true,
+  "fields" : "",
+  "icon" : "bitcoinsign.circle",
+  "jsonPath" : "",
+  "method" : "GET",
+  "name" : "Crypto",
+  "preset" : "crypto-prices",
+  "refreshSeconds" : 120,
+  "sidestats" : 1,
+  "source" : "http",
+  "transform" : "const cur = \"usd\".toUpperCase();\nif (!Array.isArray(data)) throw new Error((data && (data.error || (data.status || {}).error_message)) || 'Unexpected response (rate limited?)');\nif (!data.length) return [item.text('No coins found. Use CoinGecko ids like bitcoin, ethereum.', 'caption')];\nconst fiat = !['BTC', 'ETH', 'SATS'].includes(cur);\nreturn data.map(c => {\n  const sp = ((c.sparkline_in_7d || {}).price || []).filter((_, i, a) => i % 4 === 0 || i === a.length - 1);\n  return item.stat(c.symbol.toUpperCase(), c.current_price, { format: fiat ? 'currency' : 'number', currency: cur,\n    decimals: c.current_price < 1 ? 4 : undefined, unit: fiat ? undefined : ' ' + cur,\n    delta: num(c.price_change_percentage_24h) !== null ? c.price_change_percentage_24h / 100 : undefined, sparkline: sp });\n});",
+  "url" : "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana&sparkline=true&price_change_percentage=24h"
+}

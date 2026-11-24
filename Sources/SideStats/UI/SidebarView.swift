@@ -30,6 +30,7 @@ struct SidebarView: View {
     @EnvironmentObject var store: MetricsStore
     @EnvironmentObject var edge: EdgePanelController
     @EnvironmentObject var widgets: WidgetStore
+    @EnvironmentObject var todos: TodoStore
     var openSettings: (SettingsTab) -> Void
     @State private var expanded: String?
 
@@ -83,7 +84,8 @@ struct SidebarView: View {
                 }
             }
         } else if id == WidgetStore.tasksModule {
-            ModuleCard(id: id, title: "Tasks", icon: "checklist", status: nil) {
+            ModuleCard(id: id, title: "Tasks", icon: "checklist",
+                       status: todos.overdueCount > 0 ? "\(todos.overdueCount) overdue" : (todos.openCount > 0 ? "\(todos.openCount)" : nil)) {
                 EmptyView()
             } content: {
                 TasksModuleView()

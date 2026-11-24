@@ -62,10 +62,25 @@ struct WidgetConfig: Codable, Identifiable, Equatable {
     }
 
     /// "Header: value" lines, kept in the Keychain because they usually hold tokens.
+    /// Cached in memory so periodic refreshes don't hit the Keychain (which can prompt) every time.
     var headers: String {
-        get { Keychain.get("widget.headers.\(id)") ?? "" }
-        nonmutating set { Keychain.set("widget.headers.\(id)", newValue) }
+        get {
+            HeaderCache.lock.lock(); defer { HeaderCache.lock.unlock() }
+            if let h = HeaderCache.values[id] { return h }
+            let h = Keychain.get("widget.headers.\(id)") ?? ""
+            HeaderCache.values[id] = h
+            return h
+        }
+        nonmutating set {
+            HeaderCache.lock.lock(); HeaderCache.values[id] = newValue; HeaderCache.lock.unlock()
+            Keychain.set("widget.headers.\(id)", newValue)
+        }
     }
+}
+
+private enum HeaderCache {
+    static let lock = NSLock()
+    nonisolated(unsafe) static var values: [String: String] = [:]
 }
 
 // MARK: - Renderable items (the SideStats widget format)

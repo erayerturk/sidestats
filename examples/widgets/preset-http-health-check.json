@@ -1,0 +1,17 @@
+{
+  "body" : "",
+  "command" : "list='https://github.com, https://example.com'; for x in ${(s:,:)list}; do x=${x// /}; [[ -z $x ]] && continue; ( r=$(curl -s -o /dev/null -L -m 10 -w '%{http_code} %{time_total}' \"$x\"); printf '%s\\t%s\\t%s\\n' \"$x\" \"$r\" \"$?\" ) & done; wait",
+  "display" : "auto",
+  "enabled" : true,
+  "fields" : "",
+  "icon" : "stethoscope",
+  "jsonPath" : "",
+  "method" : "GET",
+  "name" : "Health checks",
+  "preset" : "http-health",
+  "refreshSeconds" : 60,
+  "sidestats" : 1,
+  "source" : "command",
+  "transform" : "const slow = Number(\"1000\") || 1000, order = \"https:\\/\\/github.com, https:\\/\\/example.com\".split(',').map(s => s.trim());\nconst ERR = { 6: 'DNS failed', 7: 'refused', 28: 'timeout', 35: 'TLS error', 51: 'bad certificate', 52: 'empty reply', 56: 'connection reset', 60: 'bad certificate' };\nconst rows = lines(data).map(l => {\n  const [url, res = '', exit] = l.split('\\t'), [code, secs] = res.trim().split(/\\s+/); const ms = Math.round((num(secs) || 0) * 1000), c = num(code) || 0, e = num(exit) || 0;\n  const state = e && !c ? 'error' : c >= 500 || c === 0 ? 'error' : c >= 400 ? 'warn' : ms > slow ? 'warn' : 'ok';\n  const label = url.replace(/^https?:\\/\\//, '').replace(/\\/$/, '');\n  return { url, label, state, ms, detail: c ? c + ' · ' + fmt.ms(ms) : (ERR[e] || 'failed (' + e + ')') };\n});\nif (!rows.length) return [item.text('Add at least one URL', 'caption')];\nrows.sort((a, b) => order.indexOf(a.url) - order.indexOf(b.url));\nconst bad = count(rows, r => r.state === 'error'), up = rows.filter(r => r.state !== 'error');\nreturn [\n  rows.length > 1 ? item.stat('Up', up.length, { caption: 'of ' + rows.length, color: bad ? 'red' : 'green' }) : null,\n  rows.length > 1 ? item.stat('Avg latency', Math.round(avg(up, 'ms') ?? 0), { unit: 'ms', color: (avg(up, 'ms') ?? 0) > slow ? 'orange' : undefined }) : null,\n  ...rows.map(r => item.status(r.label, r.state, r.detail))\n];",
+  "url" : ""
+}

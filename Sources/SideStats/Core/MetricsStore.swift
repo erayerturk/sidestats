@@ -113,7 +113,23 @@ final class MetricsStore: ObservableObject {
         name.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(String.init).joined()
     }
 
+    struct Snapshot {
+        var groups: [AppGroupSummary]
+        var totals: Totals
+        var series: [DailyPoint]
+        var missingCurrencies: [String]
+    }
+
     func recompute() {
+        let snap = snapshot(for: range)
+        groups = snap.groups
+        totals = snap.totals
+        series = snap.series
+        missingCurrencies = snap.missingCurrencies
+    }
+
+    /// Aggregates for any range without changing the sidebar's selection.
+    func snapshot(for range: DateRangeOption) -> Snapshot {
         let (start, end) = range.dates()
         let days = DayFormat.days(from: start, to: end)
         let base = config.baseCurrency
@@ -174,10 +190,11 @@ final class MetricsStore: ObservableObject {
         case .downloads: list.sort { $0.totals.downloads > $1.totals.downloads }
         case .name: list.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         }
-        groups = list
-        totals = list.reduce(Totals()) { $0 + $1.totals }
-        series = fill(dailyAll.map { DailyPoint(date: DayFormat.date($0.key)!, revenue: $0.value.0, spend: $0.value.1) })
-        missingCurrencies = missing.sorted()
+        return Snapshot(
+            groups: list,
+            totals: list.reduce(Totals()) { $0 + $1.totals },
+            series: fill(dailyAll.map { DailyPoint(date: DayFormat.date($0.key)!, revenue: $0.value.0, spend: $0.value.1) }),
+            missingCurrencies: missing.sorted())
     }
 
     func setAlias(_ name: String?, for keys: [AppKey]) {

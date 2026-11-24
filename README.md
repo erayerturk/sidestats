@@ -48,8 +48,105 @@ The sidebar is a stack of modules. *Apps & Revenue* is the built-in one, and you
   and rows with a date become charts, other arrays become lists, objects become stat grids, text stays text.
   Use a JSON path, field filter or display override to shape it.
 - Modules can be reordered, hidden, exported as JSON and imported, so they can be shared.
+- **Integrations:** Settings → Modules → + → *Browse integrations…* gives 40 ready-made modules (Grafana, Prometheus, Alertmanager, Uptime Kuma, UptimeRobot, Docker, Kubernetes, SSH servers, GitHub, Sentry, Vercel, Stripe, RevenueCat, Plausible, Home Assistant, weather…). See [WIDGETS.md#integrations](WIDGETS.md#integrations).
+- **Tasks:** a built-in to-do module with natural-language quick add ("call bank tomorrow 10am !!"), two-way Apple Reminders sync and due-date notifications.
 
 Settings → **Modules**. Full reference and ready-made examples: [WIDGETS.md](WIDGETS.md) · [examples/](examples/).
+
+## Automation: local API & MCP
+
+SideStats has a local HTTP API and a built-in [MCP](https://modelcontextprotocol.io) server, so scripts
+and AI agents (Claude Code, Claude Desktop, Cursor, …) can create widgets, push data, manage tasks and read
+your numbers directly. Settings → **API & MCP** shows the status, the token and copy-ready snippets.
+
+### MCP setup
+
+The MCP server is the app binary itself started with `--mcp` (stdio). It talks to the running app and
+starts SideStats if it isn't running.
+
+**Claude Code**
+```sh
+claude mcp add sidestats -- /Applications/SideStats.app/Contents/MacOS/SideStats --mcp
+```
+
+**Claude Desktop** (Settings → Developer → Edit Config) and **Cursor** (`~/.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "sidestats": {
+      "command": "/Applications/SideStats.app/Contents/MacOS/SideStats",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+Then just ask: *"Add a SideStats widget with my open GitHub PRs"*, *"push today's signups as a bar chart"*,
+*"remind me to renew the certificate on Friday"*.
+
+| Tool | What it does |
+|---|---|
+| `sidestats_status` | Version, API port, counts (also starts the app) |
+| `list_modules` | Modules in order with ids, visibility, source, last update, errors |
+| `get_widget_format` | Compact reference of the widget format and auto-detection rules |
+| `create_widget` / `update_widget` / `delete_widget` | Manage http / command / push widgets (all fields, headers, initial data) |
+| `push_widget_data` | Render new data in a widget (SideStats items or plain JSON) |
+| `refresh_widget` | Fetch an http / command widget now and return the result |
+| `reorder_modules` / `set_module_visibility` | Reorder, hide / show, collapse / expand modules |
+| `list_integrations` / `add_integration` | Ready-made integrations (presets) |
+| `list_tasks` / `add_task` / `update_task` / `complete_task` / `delete_task` | The Tasks module |
+| `get_revenue` | Revenue, spend, net, ROAS and downloads (totals and per app) for 7D / 30D / MTD / 90D |
+| `notify` | Show a macOS notification |
+| `show_panel` | Show, hide, toggle, pin or unpin the sidebar |
+
+### HTTP API
+
+The app listens on `http://127.0.0.1:48620` (or the next free port). The port and token are in
+`~/Library/Application Support/SideStats/api.json`. JSON in, JSON out; errors are `{"error": "…", "hint": "…"}`.
+
+```sh
+export SIDESTATS_TOKEN=$(plutil -extract token raw ~/Library/Application\ Support/SideStats/api.json)
+API=http://127.0.0.1:48620/v1
+AUTH="Authorization: Bearer $SIDESTATS_TOKEN"
+
+# create a push widget (source defaults to push when there's no url/command) — returns its id
+curl -s $API/widgets -H "$AUTH" -d '{"name":"Deploys","icon":"shippingbox"}'
+
+# push data to it, e.g. from CI or cron
+curl -s $API/widgets/<id>/data -H "$AUTH" \
+  -d '{"items":[{"type":"stat","label":"Today","value":12},{"type":"status","label":"CI","state":"ok"}]}'
+
+# an http widget with a secret header (stored in the Keychain)
+curl -s $API/widgets -H "$AUTH" -d '{"name":"Stars","url":"https://api.github.com/repos/apple/swift",
+  "fields":"stargazers_count,forks_count","headers":{"Authorization":"Bearer ghp_…"}}'
+
+# tasks
+curl -s $API/todos -H "$AUTH" -d '{"title":"Renew certificate","due":"2026-12-01","priority":"high"}'
+curl -s "$API/todos?done=false" -H "$AUTH"
+
+curl -s "$API/revenue?range=30D" -H "$AUTH"
+```
+
+| Endpoint | |
+|---|---|
+| `GET /v1/status` · `GET /v1/format` | App status · widget format reference |
+| `GET /v1/modules` · `POST /v1/layout` | Modules in order · `{order, hide, show, collapse, expand: [ids], move: {id, to}}` |
+| `GET` / `POST /v1/widgets` | List · create (WidgetConfig JSON, optional `headers` and `data`) |
+| `GET` / `PATCH` / `DELETE /v1/widgets/{id}` | Read · change fields · delete |
+| `POST /v1/widgets/{id}/data` · `/refresh` · `GET …/export` | Push a payload · fetch now · shareable JSON |
+| `GET /v1/presets` · `POST /v1/presets/{id}` | Integrations · create one from `{params: {…}}` |
+| `GET` / `POST /v1/todos` · `GET` / `PATCH` / `DELETE /v1/todos/{id}` | Tasks (`due`: ISO-8601 or `yyyy-MM-dd`; `priority`: 0–3 or none/low/medium/high) |
+| `GET /v1/revenue?range=7D\|30D\|MTD\|90D&series=true` | Totals and per-app numbers |
+| `POST /v1/notify` · `POST /v1/panel` | `{title, body}` · `{action: show\|hide\|toggle\|pin\|unpin}` |
+
+### Security model
+- The server binds to **127.0.0.1 only** and is never reachable from the network.
+- Every request needs the **bearer token**: 32 random bytes, stored in the Keychain and in `api.json`,
+  which is created with `0600` permissions (readable only by your user). *Regenerate* in Settings revokes it.
+- Requests with an `Origin` header (any web page) or a `Host` other than `127.0.0.1` / `localhost`
+  are refused, and no CORS headers are sent, so websites can't reach the API (including DNS rebinding).
+- Anything running as your user can read the token, just like it could read your other files.
+  Agents can create **command widgets, which run shell commands as you** — review what they add.
 
 ## Connecting sources
 
@@ -104,7 +201,8 @@ Other spend shows up as *Unattributed ad spend*.
 Sources/SideStats
 ├── main.swift                  app delegate, menu bar item, global hotkey
 ├── Core/                       models, Keychain/JWT, HTTP/CSV/gzip, FX, Google OAuth, MetricsStore,
-│                               Widgets (format parser, auto-detection, fetcher, WidgetStore)
+│                               Widgets (format parser, auto-detection, fetcher, WidgetStore),
+│                               LocalAPI (127.0.0.1 HTTP API), MCPServer (`--mcp` stdio bridge)
 ├── Providers/                  one file per data source (implements `Provider`)
 └── UI/                         edge panel controller, sidebar, module views, settings, module editor
 ```
