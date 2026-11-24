@@ -37,6 +37,8 @@ struct WidgetSettings: View {
             Group {
                 if let id = selection, id == WidgetStore.revenueModule {
                     revenueInfo
+                } else if let id = selection, id == WidgetStore.tasksModule {
+                    TasksSettingsView()
                 } else if let id = selection, let w = widgets.widget(id) {
                     WidgetEditor(original: w).id(w.id)
                 } else {
@@ -56,14 +58,15 @@ struct WidgetSettings: View {
     }
 
     private func row(_ id: String) -> some View {
-        let isRevenue = id == WidgetStore.revenueModule
+        let builtinTitle = WidgetStore.builtinTitle(id)
+        let isRevenue = builtinTitle != nil   // any built-in module
         let w = widgets.widget(id)
         let hidden = widgets.hidden.contains(id) || (w?.enabled == false)
         return HStack {
-            Image(systemName: isRevenue ? "dollarsign.circle" : (w?.icon ?? "square"))
+            Image(systemName: isRevenue ? WidgetStore.builtinIcon(id) : (w?.icon ?? "square"))
                 .frame(width: 18).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
-                Text(isRevenue ? "Apps & Revenue" : (w?.name ?? id)).lineLimit(1)
+                Text(builtinTitle ?? w?.name ?? id).lineLimit(1)
                 Text(isRevenue ? "Built-in" : (w?.source.title ?? "")).font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
@@ -263,7 +266,7 @@ struct WidgetEditor: View {
         Task {
             do {
                 let (payload, data) = try await WidgetFetcher.fetch(cfg, headers: h)
-                preview = WidgetParser.parse(payload, config: cfg)
+                preview = try WidgetParser.process(payload, config: cfg)
                 raw = String(decoding: data.prefix(8000), as: UTF8.self)
             } catch {
                 self.error = error.localizedDescription

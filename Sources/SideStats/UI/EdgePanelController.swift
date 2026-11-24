@@ -25,7 +25,7 @@ final class EdgePanelController: ObservableObject {
     private var outsideSince: Date?
     private var currentScreen: NSScreen?
 
-    init(store: MetricsStore, widgets: WidgetStore, openSettings: @escaping (SettingsTab) -> Void) {
+    init(store: MetricsStore, widgets: WidgetStore, todos: TodoStore, openSettings: @escaping (SettingsTab) -> Void) {
         self.store = store
         panel = SidebarPanel(contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 600),
                              styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
@@ -42,6 +42,7 @@ final class EdgePanelController: ObservableObject {
         let root = SidebarView(openSettings: openSettings)
             .environmentObject(store)
             .environmentObject(widgets)
+            .environmentObject(todos)
             .environmentObject(self)
         let host = NSHostingView(rootView: root)
         let blur = NSVisualEffectView()

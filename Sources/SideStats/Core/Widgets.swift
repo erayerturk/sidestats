@@ -3,9 +3,15 @@ import Foundation
 // MARK: - Widget definition (what the user configures / shares)
 
 enum WidgetSourceType: String, Codable, CaseIterable, Identifiable {
-    case http, command
+    case http, command, push
     var id: String { rawValue }
-    var title: String { self == .http ? "HTTP API" : "Shell command" }
+    var title: String {
+        switch self {
+        case .http: return "HTTP API"
+        case .command: return "Shell command"
+        case .push: return "Push (API / MCP)"
+        }
+    }
 }
 
 enum WidgetDisplay: String, Codable, CaseIterable, Identifiable {
@@ -27,6 +33,11 @@ struct WidgetConfig: Codable, Identifiable, Equatable {
     var display: WidgetDisplay = .auto
     var refreshSeconds = 300
     var enabled = true
+    /// Optional JavaScript run on the payload before rendering. Either a function expression
+    /// `(data) => ({items: [...]})` or a body using `data` that returns a value. See WidgetTransform.
+    var transform = ""
+    /// Preset id this widget was created from (informational).
+    var preset = ""
 
     init() {}
 
@@ -46,6 +57,8 @@ struct WidgetConfig: Codable, Identifiable, Equatable {
         display = try c.decodeIfPresent(WidgetDisplay.self, forKey: .display) ?? .auto
         refreshSeconds = max(5, try c.decodeIfPresent(Int.self, forKey: .refreshSeconds) ?? 300)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        transform = try c.decodeIfPresent(String.self, forKey: .transform) ?? ""
+        preset = try c.decodeIfPresent(String.self, forKey: .preset) ?? ""
     }
 
     /// "Header: value" lines, kept in the Keychain because they usually hold tokens.
@@ -149,6 +162,13 @@ struct StatusSpec {
 
 enum WidgetParser {
     static let types: Set<String> = ["stat", "chart", "list", "text", "progress", "status"]
+
+    /// Full pipeline: optional JS transform, then format parsing / auto-detection.
+    static func process(_ payload: Any, config: WidgetConfig) throws -> [WidgetItem] {
+        let transformed = config.transform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? payload : try WidgetTransform.apply(config.transform, to: payload)
+        return parse(transformed, config: config)
+    }
 
     static func parse(_ payload: Any, config: WidgetConfig) -> [WidgetItem] {
         let value = select(payload, path: config.jsonPath)
@@ -429,6 +449,12 @@ enum WidgetFetcher {
             (data, _) = try await HTTP.data(req)
         case .command:
             data = try await run(expand(c.command))
+        case .push:
+            // Push widgets get data from the local API / MCP; "fetch" returns the last pushed payload.
+            guard let d = try? Data(contentsOf: Storage.dir.appendingPathComponent("widget-\(c.id).raw")) else {
+                throw SideStatsError("No data pushed yet. Send it with the SideStats API or MCP (id: \(c.id)).")
+            }
+            data = d
         }
         return (decode(data), data)
     }
@@ -494,6 +520,18 @@ struct WidgetState {
 @MainActor
 final class WidgetStore: ObservableObject {
     static let revenueModule = "builtin.revenue"
+    static let tasksModule = "builtin.tasks"
+    static let builtinModules = [revenueModule, tasksModule]
+    static func builtinTitle(_ id: String) -> String? {
+        switch id {
+        case revenueModule: return "Apps & Revenue"
+        case tasksModule: return "Tasks"
+        default: return nil
+        }
+    }
+    static func builtinIcon(_ id: String) -> String {
+        id == tasksModule ? "checklist" : "dollarsign.circle"
+    }
 
     @Published var widgets: [WidgetConfig] { didSet { save(); syncLayout(); if widgets != oldValue { reparse(changed: oldValue) } } }
     @Published var layout: [String] { didSet { UserDefaults.standard.set(layout, forKey: "layout") } }
@@ -514,7 +552,7 @@ final class WidgetStore: ObservableObject {
         for w in widgets {
             if let data = try? Data(contentsOf: Storage.dir.appendingPathComponent("widget-\(w.id).raw")) {
                 raw[w.id] = data
-                states[w.id] = WidgetState(items: WidgetParser.parse(WidgetFetcher.decode(data), config: w))
+                states[w.id] = WidgetState(items: (try? WidgetParser.process(WidgetFetcher.decode(data), config: w)) ?? [])
             }
         }
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -526,7 +564,7 @@ final class WidgetStore: ObservableObject {
     /// Modules in display order, excluding hidden and disabled ones.
     var visibleModules: [String] {
         layout.filter { id in
-            !hidden.contains(id) && (id == Self.revenueModule || widgets.first { $0.id == id }?.enabled == true)
+            !hidden.contains(id) && (Self.builtinModules.contains(id) || widgets.first { $0.id == id }?.enabled == true)
         }
     }
 
@@ -537,9 +575,9 @@ final class WidgetStore: ObservableObject {
     }
 
     private func syncLayout() {
-        let valid = Set(widgets.map(\.id) + [Self.revenueModule])
+        let valid = Set(widgets.map(\.id) + Self.builtinModules)
         var l = layout.filter { valid.contains($0) }
-        for id in [Self.revenueModule] + widgets.map(\.id) where !l.contains(id) { l.append(id) }
+        for id in Self.builtinModules + widgets.map(\.id) where !l.contains(id) { l.append(id) }
         if l != layout { layout = l }
     }
 
@@ -547,15 +585,18 @@ final class WidgetStore: ObservableObject {
     private func reparse(changed old: [WidgetConfig]) {
         for w in widgets {
             guard let prev = old.first(where: { $0.id == w.id }), prev != w, let data = raw[w.id] else { continue }
-            if prev.url != w.url || prev.command != w.command || prev.source != w.source || prev.body != w.body {
+            if w.source != .push && (prev.url != w.url || prev.command != w.command || prev.source != w.source || prev.body != w.body) {
                 refresh(w.id); continue
             }
-            states[w.id, default: .init()].items = WidgetParser.parse(WidgetFetcher.decode(data), config: w)
+            do {
+                states[w.id, default: .init()].items = try WidgetParser.process(WidgetFetcher.decode(data), config: w)
+                states[w.id]?.error = nil
+            } catch { states[w.id, default: .init()].error = error.localizedDescription }
         }
     }
 
     func refreshDue() {
-        for w in widgets where w.enabled && !(states[w.id]?.loading ?? false) {
+        for w in widgets where w.enabled && w.source != .push && !(states[w.id]?.loading ?? false) {
             let last = states[w.id]?.updated ?? .distantPast
             if Date().timeIntervalSince(last) >= Double(max(w.refreshSeconds, 5)) { refresh(w.id) }
         }
@@ -564,7 +605,7 @@ final class WidgetStore: ObservableObject {
     func refreshAll() { for w in widgets where w.enabled { refresh(w.id) } }
 
     func refresh(_ id: String) {
-        guard let w = widget(id) else { return }
+        guard let w = widget(id), w.source != .push else { return }
         states[id, default: .init()].loading = true
         Task {
             do {
@@ -572,13 +613,34 @@ final class WidgetStore: ObservableObject {
                 raw[id] = data
                 try? data.write(to: Storage.dir.appendingPathComponent("widget-\(id).raw"))
                 let current = widget(id) ?? w
-                states[id] = WidgetState(items: WidgetParser.parse(payload, config: current), updated: Date())
+                states[id] = WidgetState(items: try WidgetParser.process(payload, config: current), updated: Date())
             } catch {
                 var s = states[id] ?? .init()
                 s.loading = false; s.error = error.localizedDescription; s.updated = Date()
                 states[id] = s
             }
         }
+    }
+
+    /// Push data into a widget (used by the local API / MCP for `.push` widgets, but works for any).
+    /// `payload` is any JSON value: SideStats format or plain data.
+    func push(_ id: String, payload: Any) throws {
+        guard let w = widget(id) else { throw SideStatsError("No widget with id \(id)") }
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.fragmentsAllowed])
+        let items = try WidgetParser.process(payload, config: w)
+        raw[id] = data
+        try? data.write(to: Storage.dir.appendingPathComponent("widget-\(id).raw"))
+        states[id] = WidgetState(items: items, updated: Date())
+    }
+
+    /// Adds a widget and returns it (fresh id unless one is given and unused).
+    @discardableResult
+    func add(_ w: WidgetConfig) -> WidgetConfig {
+        var w = w
+        if w.id.isEmpty || widgets.contains(where: { $0.id == w.id }) { w.id = UUID().uuidString }
+        widgets.append(w)
+        if w.source != .push { refresh(w.id) }
+        return w
     }
 
     func remove(_ id: String) {

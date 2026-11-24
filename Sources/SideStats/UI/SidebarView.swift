@@ -82,6 +82,12 @@ struct SidebarView: View {
                     }
                 }
             }
+        } else if id == WidgetStore.tasksModule {
+            ModuleCard(id: id, title: "Tasks", icon: "checklist", status: nil) {
+                EmptyView()
+            } content: {
+                TasksModuleView()
+            }
         } else if let w = widgets.widget(id) {
             WidgetModuleView(config: w)
         }

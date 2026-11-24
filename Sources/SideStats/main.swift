@@ -6,13 +6,17 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = MetricsStore()
     let widgets = WidgetStore()
+    let todos = TodoStore()
+    var api: LocalAPIServer!
     var edge: EdgePanelController!
     private var statusItem: NSStatusItem!
     private var settingsWindow: NSWindow?
     private var hotKeyRef: EventHotKeyRef?
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        edge = EdgePanelController(store: store, widgets: widgets, openSettings: { [weak self] in self?.openSettings(tab: $0) })
+        api = LocalAPIServer(widgets: widgets, todos: todos)
+        api.start()
+        edge = EdgePanelController(store: store, widgets: widgets, todos: todos, openSettings: { [weak self] in self?.openSettings(tab: $0) })
         setupStatusItem()
         registerHotKey()
         if store.hasAnySource { Task { await store.refresh() } }
@@ -54,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let tab { UserDefaults.standard.set(tab.rawValue, forKey: "settingsTab") }
         if settingsWindow == nil {
             let w = NSWindow(contentViewController: NSHostingController(
-                rootView: SettingsView().environmentObject(store).environmentObject(widgets)))
+                rootView: SettingsView().environmentObject(store).environmentObject(widgets).environmentObject(todos)))
             w.title = "SideStats Settings"
             w.styleMask = [.titled, .closable, .miniaturizable]
             w.isReleasedWhenClosed = false

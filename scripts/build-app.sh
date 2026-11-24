@@ -29,6 +29,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.business</string>
+  <key>NSRemindersFullAccessUsageDescription</key><string>SideStats shows and completes your reminders in the sidebar Tasks module.</string>
+  <key>NSRemindersUsageDescription</key><string>SideStats shows and completes your reminders in the sidebar Tasks module.</string>
 </dict></plist>
 PLIST
 
