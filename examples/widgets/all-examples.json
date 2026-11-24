@@ -1,0 +1,49 @@
+[
+  {
+    "name": "apple/swift on GitHub",
+    "icon": "star",
+    "source": "http",
+    "url": "https://api.github.com/repos/apple/swift",
+    "method": "GET",
+    "fields": "stargazers_count,forks_count,open_issues_count,subscribers_count",
+    "display": "auto",
+    "refreshSeconds": 600,
+    "enabled": true
+  },
+  {
+    "name": "Bitcoin (USD)",
+    "icon": "bitcoinsign.circle",
+    "source": "http",
+    "url": "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+    "method": "GET",
+    "jsonPath": "data",
+    "fields": "amount",
+    "display": "auto",
+    "refreshSeconds": 30,
+    "enabled": true
+  },
+  {
+    "name": "Disk",
+    "icon": "internaldrive",
+    "source": "command",
+    "command": "LC_ALL=C df -k / | awk 'NR==2 {t=$2; u=$2-$4; printf \"{\\\"items\\\":[{\\\"type\\\":\\\"progress\\\",\\\"label\\\":\\\"Disk /\\\",\\\"value\\\":%d,\\\"max\\\":%d,\\\"caption\\\":\\\"%.0f of %.0f GB used\\\"}]}\\n\", u, t, u/1048576, t/1048576}'",
+    "refreshSeconds": 120,
+    "enabled": true
+  },
+  {
+    "name": "System",
+    "icon": "cpu",
+    "source": "command",
+    "command": "export LC_ALL=C; load=$(sysctl -n vm.loadavg | awk '{print $2}'); boot=$(sysctl -n kern.boottime | sed -E 's/^\\{ sec = ([0-9]+).*/\\1/'); up=$(( $(date +%s) - boot )); ncpu=$(sysctl -n hw.ncpu); st=$(awk -v l=\"$load\" -v n=\"$ncpu\" 'BEGIN{print (l>n)?\"warn\":\"ok\"}'); rows=$(ps -Arco pcpu=,comm= | head -5 | awk '{c=$1; $1=\"\"; sub(/^ +/,\"\"); gsub(/[\"\\\\]/,\"\"); printf \"%s{\\\"title\\\":\\\"%s\\\",\\\"value\\\":\\\"%s%%\\\",\\\"icon\\\":\\\"sf:cpu\\\"}\", (NR>1?\",\":\"\"), $0, c}'); printf '{\"items\":[{\"type\":\"stat\",\"label\":\"Load (1m)\",\"value\":%s,\"decimals\":2},{\"type\":\"stat\",\"label\":\"Uptime\",\"value\":%d,\"format\":\"duration\"},{\"type\":\"status\",\"label\":\"CPU load\",\"state\":\"%s\",\"detail\":\"%s cores\"},{\"type\":\"list\",\"label\":\"Top CPU\",\"rows\":[%s]}]}\\n' \"$load\" \"$up\" \"$st\" \"$ncpu\" \"$rows\"",
+    "refreshSeconds": 15,
+    "enabled": true
+  },
+  {
+    "name": "Format showcase",
+    "icon": "square.grid.2x2",
+    "source": "command",
+    "command": "cat <<'JSON'\n{\"items\":[\n {\"type\":\"text\",\"text\":\"**Format showcase** — every item type. See `WIDGETS.md`.\",\"style\":\"body\"},\n {\"type\":\"stat\",\"label\":\"MRR\",\"value\":12840,\"format\":\"currency\",\"currency\":\"USD\",\"delta\":0.12,\"sparkline\":[9800,10400,10900,11500,12100,12840]},\n {\"type\":\"stat\",\"label\":\"Churn\",\"value\":0.031,\"format\":\"percent\",\"delta\":0.004,\"positiveIsGood\":false,\"color\":\"orange\"},\n {\"type\":\"stat\",\"label\":\"Storage\",\"value\":7340032000,\"format\":\"bytes\",\"caption\":\"of 10 GB\"},\n {\"type\":\"stat\",\"label\":\"Avg session\",\"value\":754,\"format\":\"duration\",\"color\":\"#5E5CE6\"},\n {\"type\":\"chart\",\"label\":\"Visitors vs signups\",\"kind\":\"line\",\"series\":[\n   {\"name\":\"Visitors\",\"color\":\"blue\",\"points\":[{\"x\":\"{{daysAgo:6}}\",\"y\":120},{\"x\":\"{{daysAgo:5}}\",\"y\":140},{\"x\":\"{{daysAgo:4}}\",\"y\":132},{\"x\":\"{{daysAgo:3}}\",\"y\":180},{\"x\":\"{{daysAgo:2}}\",\"y\":165},{\"x\":\"{{daysAgo:1}}\",\"y\":210},{\"x\":\"{{today}}\",\"y\":198}]},\n   {\"name\":\"Signups\",\"color\":\"green\",\"points\":[[\"{{daysAgo:6}}\",12],[\"{{daysAgo:5}}\",15],[\"{{daysAgo:4}}\",11],[\"{{daysAgo:3}}\",22],[\"{{daysAgo:2}}\",18],[\"{{daysAgo:1}}\",25],[\"{{today}}\",21]]}]},\n {\"type\":\"chart\",\"label\":\"Revenue by plan\",\"kind\":\"bar\",\"format\":\"currency\",\"height\":90,\"points\":[{\"label\":\"Free\",\"value\":0},{\"label\":\"Pro\",\"value\":5400},{\"label\":\"Team\",\"value\":7440}]},\n {\"type\":\"chart\",\"label\":\"Traffic sources\",\"kind\":\"donut\",\"points\":[{\"label\":\"Search\",\"value\":48},{\"label\":\"Direct\",\"value\":27},{\"label\":\"Social\",\"value\":15},{\"label\":\"Referral\",\"value\":10}]},\n {\"type\":\"list\",\"label\":\"Recent orders\",\"limit\":3,\"rows\":[\n   {\"title\":\"Ada Lovelace\",\"subtitle\":\"Team plan\",\"value\":\"+$49\",\"valueColor\":\"green\",\"icon\":\"sf:person.crop.circle\",\"url\":\"https://example.com/orders/1\"},\n   {\"title\":\"Alan Turing\",\"subtitle\":\"Pro plan\",\"value\":\"+$19\",\"valueColor\":\"green\",\"icon\":\"sf:person.crop.circle\"},\n   {\"title\":\"Grace Hopper\",\"subtitle\":\"Refund\",\"value\":\"-$19\",\"valueColor\":\"red\",\"icon\":\"sf:arrow.uturn.backward.circle\"},\n   {\"title\":\"Linus Torvalds\",\"subtitle\":\"Pro plan\",\"value\":\"+$19\",\"valueColor\":\"green\",\"icon\":\"sf:person.crop.circle\"}]},\n {\"type\":\"progress\",\"label\":\"Monthly goal\",\"value\":12840,\"max\":20000,\"caption\":\"$12.8k / $20k\",\"color\":\"purple\"},\n {\"type\":\"status\",\"label\":\"API\",\"state\":\"ok\",\"detail\":\"99.98% uptime\"},\n {\"type\":\"status\",\"label\":\"Queue\",\"state\":\"warn\",\"detail\":\"1,204 jobs waiting\"},\n {\"type\":\"status\",\"label\":\"Billing webhook\",\"state\":\"error\",\"detail\":\"last delivery failed\"},\n {\"type\":\"text\",\"text\":\"Updated by a shell heredoc\",\"style\":\"caption\"}\n]}\nJSON",
+    "refreshSeconds": 3600,
+    "enabled": true
+  }
+]

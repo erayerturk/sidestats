@@ -1,0 +1,11 @@
+{
+  "name": "apple/swift on GitHub",
+  "icon": "star",
+  "source": "http",
+  "url": "https://api.github.com/repos/apple/swift",
+  "method": "GET",
+  "fields": "stargazers_count,forks_count,open_issues_count,subscribers_count",
+  "display": "auto",
+  "refreshSeconds": 600,
+  "enabled": true
+}

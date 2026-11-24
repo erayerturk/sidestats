@@ -1,0 +1,8 @@
+{
+  "name": "Disk",
+  "icon": "internaldrive",
+  "source": "command",
+  "command": "LC_ALL=C df -k / | awk 'NR==2 {t=$2; u=$2-$4; printf \"{\\\"items\\\":[{\\\"type\\\":\\\"progress\\\",\\\"label\\\":\\\"Disk /\\\",\\\"value\\\":%d,\\\"max\\\":%d,\\\"caption\\\":\\\"%.0f of %.0f GB used\\\"}]}\\n\", u, t, u/1048576, t/1048576}'",
+  "refreshSeconds": 120,
+  "enabled": true
+}

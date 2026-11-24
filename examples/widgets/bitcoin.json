@@ -1,0 +1,12 @@
+{
+  "name": "Bitcoin (USD)",
+  "icon": "bitcoinsign.circle",
+  "source": "http",
+  "url": "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+  "method": "GET",
+  "jsonPath": "data",
+  "fields": "amount",
+  "display": "auto",
+  "refreshSeconds": 30,
+  "enabled": true
+}

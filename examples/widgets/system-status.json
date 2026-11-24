@@ -1,0 +1,8 @@
+{
+  "name": "System",
+  "icon": "cpu",
+  "source": "command",
+  "command": "export LC_ALL=C; load=$(sysctl -n vm.loadavg | awk '{print $2}'); boot=$(sysctl -n kern.boottime | sed -E 's/^\\{ sec = ([0-9]+).*/\\1/'); up=$(( $(date +%s) - boot )); ncpu=$(sysctl -n hw.ncpu); st=$(awk -v l=\"$load\" -v n=\"$ncpu\" 'BEGIN{print (l>n)?\"warn\":\"ok\"}'); rows=$(ps -Arco pcpu=,comm= | head -5 | awk '{c=$1; $1=\"\"; sub(/^ +/,\"\"); gsub(/[\"\\\\]/,\"\"); printf \"%s{\\\"title\\\":\\\"%s\\\",\\\"value\\\":\\\"%s%%\\\",\\\"icon\\\":\\\"sf:cpu\\\"}\", (NR>1?\",\":\"\"), $0, c}'); printf '{\"items\":[{\"type\":\"stat\",\"label\":\"Load (1m)\",\"value\":%s,\"decimals\":2},{\"type\":\"stat\",\"label\":\"Uptime\",\"value\":%d,\"format\":\"duration\"},{\"type\":\"status\",\"label\":\"CPU load\",\"state\":\"%s\",\"detail\":\"%s cores\"},{\"type\":\"list\",\"label\":\"Top CPU\",\"rows\":[%s]}]}\\n' \"$load\" \"$up\" \"$st\" \"$ncpu\" \"$rows\"",
+  "refreshSeconds": 15,
+  "enabled": true
+}
