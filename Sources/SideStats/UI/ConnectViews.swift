@@ -332,7 +332,16 @@ struct GoogleSettings: View {
             SourceFooter(kinds: [.admob, .googlePlay, .googleAds], docs: docsBase + "google-admob--google-play")
         }
         .formStyle(.grouped)
+        .task {
+            // Demo/automation hook: start one sign-in shortly after the tab appears.
+            guard ProcessInfo.processInfo.environment["SIDESTATS_DEMO_SIGNIN"] == "1", !Self.demoStarted else { return }
+            Self.demoStarted = true
+            try? await Task.sleep(for: .seconds(4))
+            signIn()
+        }
     }
+
+    @MainActor private static var demoStarted = false
 
     @ViewBuilder private var ownClientFields: some View {
         VStack(alignment: .leading, spacing: 6) {

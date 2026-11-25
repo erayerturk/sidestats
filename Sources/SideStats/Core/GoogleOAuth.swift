@@ -60,10 +60,16 @@ actor GoogleOAuth {
             .init(name: "prompt", value: "consent select_account"),
             .init(name: "state", value: state),
         ]
-        let authURL = comps.url!
-        await MainActor.run { _ = NSWorkspace.shared.open(authURL) }
+        // Demo/automation hook: write the URL to a file (English consent screen) instead of opening the browser.
+        if let file = ProcessInfo.processInfo.environment["SIDESTATS_OAUTH_URL_FILE"] {
+            comps.queryItems?.append(.init(name: "hl", value: "en"))
+            try? comps.url!.absoluteString.write(toFile: file, atomically: true, encoding: .utf8)
+        } else {
+            let authURL = comps.url!
+            await MainActor.run { _ = NSWorkspace.shared.open(authURL) }
+        }
 
-        let params = try await receiver.waitForCallback(timeout: 300)
+        let params = try await receiver.waitForCallback(timeout: 900)
         guard params["state"] == state else { throw SideStatsError("OAuth state mismatch") }
         guard let code = params["code"] else {
             throw SideStatsError("Google sign-in was cancelled (\(params["error"] ?? "no code"))")
