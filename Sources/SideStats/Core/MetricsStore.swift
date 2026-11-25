@@ -185,9 +185,10 @@ final class MetricsStore: ObservableObject {
         }
 
         let active = Set(configuredSources)
+        let hidden = Set(config.hiddenApps)
         var byKey: [AppKey: (Totals, [String: (Double, Double)])] = [:]
         for (kind, result) in results where active.contains(kind) {
-            for row in result.rows where row.date >= start && row.date <= end {
+            for row in result.rows where row.date >= start && row.date <= end && !hidden.contains(row.app.id) {
                 var entry = byKey[row.app] ?? (Totals(), [:])
                 let t = Totals(adRevenue: conv(row.adRevenue, row.currency),
                                iapRevenue: conv(row.iapRevenue, row.currency),
@@ -240,6 +241,20 @@ final class MetricsStore: ObservableObject {
             totals: list.reduce(Totals()) { $0 + $1.totals },
             series: fill(dailyAll.map { DailyPoint(date: DayFormat.date($0.key)!, revenue: $0.value.0, spend: $0.value.1) }),
             missingCurrencies: missing.sorted())
+    }
+
+    func setHidden(_ hide: Bool, for keys: [AppKey]) {
+        var c = config
+        let ids = keys.map(\.id)
+        c.hiddenApps.removeAll { ids.contains($0) }
+        if hide { c.hiddenApps += ids }
+        config = c
+    }
+
+    /// Hidden apps grouped by display name, for Settings.
+    var hiddenGroups: [(name: String, keys: [AppKey])] {
+        let keys = config.hiddenApps.compactMap(AppKey.init(id:))
+        return Dictionary(grouping: keys, by: displayName).map { ($0.key, $0.value) }.sorted { $0.name < $1.name }
     }
 
     func setAlias(_ name: String?, for keys: [AppKey]) {

@@ -150,6 +150,7 @@ struct SidebarView: View {
         if g.keys.contains(where: { store.config.aliases[$0.id] != nil }) {
             Button("Reset name") { store.setAlias(nil, for: g.keys) }
         }
+        Button("Hide \(g.name)") { store.setHidden(true, for: g.keys) }
         Divider()
         ForEach(g.keys, id: \.self) { k in
             Text("\(k.platform.label): \(k.storeId)")

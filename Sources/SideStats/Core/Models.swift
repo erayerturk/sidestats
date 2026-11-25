@@ -40,6 +40,14 @@ struct AppKey: Hashable, Codable, Comparable {
 
     var id: String { "\(platform.rawValue):\(storeId)" }
 
+    init(platform: Platform, storeId: String) { self.platform = platform; self.storeId = storeId }
+
+    /// Inverse of `id` (the store id itself may contain colons).
+    init?(id: String) {
+        guard let i = id.firstIndex(of: ":"), let p = Platform(rawValue: String(id[..<i])) else { return nil }
+        self.init(platform: p, storeId: String(id[id.index(after: i)...]))
+    }
+
     static func < (a: AppKey, b: AppKey) -> Bool { a.id < b.id }
 }
 

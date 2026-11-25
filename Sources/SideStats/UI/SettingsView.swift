@@ -174,6 +174,20 @@ struct GeneralSettings: View {
                     Button("Reset all custom app names (\(store.config.aliases.count))") { store.config.aliases = [:] }
                 }
             }
+            Section {
+                if store.config.hiddenApps.isEmpty {
+                    Text("Right-click an app in the sidebar → Hide to leave it out of the list and all totals.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach(store.hiddenGroups, id: \.name) { g in
+                    HStack {
+                        Text(g.name)
+                        Text(Set(g.keys.map(\.platform.label)).sorted().joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Show") { store.setHidden(false, for: g.keys) }.controlSize(.small)
+                    }
+                }
+            } header: { Text("Hidden apps") }
         }
         .formStyle(.grouped)
     }

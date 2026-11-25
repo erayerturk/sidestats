@@ -53,6 +53,9 @@ struct Config: Codable, Equatable {
     /// AppKey.id -> custom group name (merges apps across platforms or renames them)
     var aliases: [String: String] = [:]
 
+    /// AppKey.id of apps hidden from the sidebar (left out of every total too)
+    var hiddenApps: [String] = []
+
     static func load() -> Config {
         // Merge stored keys over defaults so newly added settings don't invalidate old configs.
         guard let d = UserDefaults.standard.data(forKey: "config"),
