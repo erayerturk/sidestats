@@ -41,6 +41,14 @@ struct Config: Codable, Equatable {
     /// Set on scoped copies only: the account's campaign selection (nil = all campaigns).
     var campaignFilter: [String]? = nil
 
+    var campaignApps: [String: String] = [:]
+
+    /// The app a campaign was assigned to in Settings (overrides the API's attribution).
+    func assignedApp(_ account: String, _ campaign: String?) -> AppKey? {
+        guard let name = campaignApps["\(account):\(campaign ?? "")"]?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { return nil }
+        return AppKey(platform: .other, storeId: "campaign-app:" + name)
+    }
+
     /// Whether a campaign ("<account>:<campaign id>") of the scoped account is tracked.
     func tracksCampaign(_ account: String, _ campaign: String?) -> Bool {
         guard let f = campaignFilter else { return true }

@@ -47,6 +47,8 @@ struct SourceAccount: Codable, Equatable, Identifiable {
 
     /// Ad campaigns to track ("<account>:<campaign id>"); nil = every campaign, including new ones.
     var campaignFilter: [String]? = nil
+    /// Campaign key → app name, for campaigns the API can't attribute (video, search, web campaigns).
+    var campaignApps: [String: String] = [:]
 
     init(kind: AccountKind) { self.kind = kind }
 
@@ -63,6 +65,7 @@ struct SourceAccount: Codable, Equatable, Identifiable {
         asaClientId = v(.asaClientId, ""); asaTeamId = v(.asaTeamId, ""); asaKeyId = v(.asaKeyId, ""); asaOrgId = v(.asaOrgId, "")
         metaAdAccounts = v(.metaAdAccounts, "")
         campaignFilter = (try? c.decodeIfPresent([String].self, forKey: .campaignFilter)) ?? nil
+        campaignApps = v(.campaignApps, [:])
     }
 
     var displayName: String {
@@ -89,6 +92,7 @@ struct SourceAccount: Codable, Equatable, Identifiable {
         var c = base
         c.accountId = id
         c.campaignFilter = campaignFilter
+        c.campaignApps = campaignApps
         switch kind {
         case .google:
             c.googleSignedInClientId = googleClientId; c.googleClientId = googleClientId

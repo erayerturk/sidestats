@@ -213,3 +213,11 @@ extension Connect {
         return out
     }
 }
+
+enum CampaignAssign {
+    /// Name hints for rows attributed to apps assigned in Settings.
+    static func names(_ rows: [MetricRow]) -> [AppNameHint] {
+        Set(rows.map(\.app)).filter { $0.storeId.hasPrefix("campaign-app:") }
+            .map { AppNameHint(app: $0, name: String($0.storeId.dropFirst("campaign-app:".count)), priority: 50) }
+    }
+}

@@ -33,7 +33,7 @@ struct MetaAdsProvider: Provider {
                 + "&fields=campaign_id,spend,impressions,clicks,actions,account_currency,date_start&time_range=\(range)"
             for r in try await paged(url, token) {
                 guard let day = r.str("date_start"), c.tracksCampaign(act, r.str("campaign_id")) else { continue }
-                let key = r.str("campaign_id").flatMap { campaignApp[$0] } ?? .unassigned
+                let key = c.assignedApp(act, r.str("campaign_id")) ?? r.str("campaign_id").flatMap { campaignApp[$0] } ?? .unassigned
                 let installs = r.arr("actions").filter { ["mobile_app_install", "app_install", "omni_app_install"].contains($0.str("action_type") ?? "") }
                     .map { $0.num("value") }.max() ?? 0
                 rows.append(MetricRow(date: day, app: key, source: kind,
@@ -43,7 +43,7 @@ struct MetaAdsProvider: Provider {
                                       installs: installs))
             }
         }
-        return ProviderResult(rows: rows)
+        return ProviderResult(rows: rows, names: CampaignAssign.names(rows))
     }
 
     private func paged(_ first: String, _ token: String) async throws -> [[String: Any]] {

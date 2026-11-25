@@ -55,7 +55,7 @@ struct AppleSearchAdsProvider: Provider {
                 for row in campaigns {
                     let meta = row.dict("metadata") ?? [:]
                     guard c.tracksCampaign(org, meta.str("campaignId")) else { continue }
-                    let key = meta.str("adamId").map { AppKey(platform: .ios, storeId: $0) } ?? .unassigned
+                    let key = c.assignedApp(org, meta.str("campaignId")) ?? meta.str("adamId").map { AppKey(platform: .ios, storeId: $0) } ?? .unassigned
                     for g in row.arr("granularity") {
                         guard let date = g.str("date") else { continue }
                         let spend = g.dict("localSpend") ?? [:]
@@ -72,6 +72,6 @@ struct AppleSearchAdsProvider: Provider {
                 if campaigns.isEmpty || offset >= total { break }
             }
         }
-        return ProviderResult(rows: rows)
+        return ProviderResult(rows: rows, names: CampaignAssign.names(rows))
     }
 }

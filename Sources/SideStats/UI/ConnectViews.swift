@@ -713,10 +713,12 @@ struct CampaignPickerRow: View {
             if ProcessInfo.processInfo.environment["SIDESTATS_DEMO_CAMPAIGNS"] == source.rawValue { show = true }
         }
         .sheet(isPresented: $show) {
-            CampaignPickerSheet(filter: account.campaignFilter, load: { try await load(account.scoped(store.config)) }) { newFilter in
+            CampaignPickerSheet(filter: account.campaignFilter, initialApps: account.campaignApps,
+                                load: { try await load(account.scoped(store.config)) }) { newFilter in
                 show = false
                 guard let newFilter else { return }   // cancelled
                 account.campaignFilter = newFilter.all ? nil : newFilter.ids.sorted()
+                account.campaignApps = newFilter.apps.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
                 Task { await store.refresh(only: [source]) }
             }
         }
@@ -725,9 +727,11 @@ struct CampaignPickerRow: View {
 
 private struct CampaignPickerSheet: View {
     let filter: [String]?
+    let initialApps: [String: String]
     let load: () async throws -> [AdCampaign]
-    let done: ((all: Bool, ids: Set<String>)?) -> Void
+    let done: ((all: Bool, ids: Set<String>, apps: [String: String])?) -> Void
 
+    @State private var apps: [String: String] = [:]
     @State private var campaigns: [AdCampaign] = []
     @State private var selected: Set<String> = []
     @State private var trackAll = true
@@ -753,6 +757,8 @@ private struct CampaignPickerSheet: View {
             Text(trackAll ? "Every campaign counts, and new campaigns are added automatically."
                  : "Only checked campaigns count toward spend, ad views, clicks and installs.")
                 .font(.caption).foregroundStyle(.secondary)
+            Text("App: type an app name for campaigns that should count toward it (video, search or pre-registration campaigns aren't linked to an app automatically). Use the same name as in the sidebar to merge.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
             if !trackAll {
                 HStack {
@@ -781,7 +787,6 @@ private struct CampaignPickerSheet: View {
                             }
                         }
                     }
-                    .disabled(trackAll).opacity(trackAll ? 0.55 : 1)
                 }
             }
             .frame(minHeight: 260)
@@ -790,14 +795,15 @@ private struct CampaignPickerSheet: View {
                 if !trackAll { Text("\(selected.count) of \(campaigns.count) selected").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
                 Button("Cancel") { done(nil) }.keyboardShortcut(.cancelAction)
-                Button("Save") { done((trackAll, selected)) }.keyboardShortcut(.defaultAction)
+                Button("Save") { done((trackAll, selected, apps)) }.keyboardShortcut(.defaultAction)
                     .disabled(!trackAll && (selected.isEmpty || loading))
             }
         }
         .padding(16)
-        .frame(width: 540, height: 520)
+        .frame(width: 620, height: 540)
         .task {
             trackAll = filter == nil
+            apps = initialApps
             do {
                 campaigns = try await load()
                 // Start from the saved pick, or from the active campaigns when switching from "all".
@@ -811,17 +817,21 @@ private struct CampaignPickerSheet: View {
     }
 
     private func row(_ c: AdCampaign) -> some View {
-        Toggle(isOn: Binding(get: { trackAll || selected.contains(c.id) },
-                             set: { on in if on { selected.insert(c.id) } else { selected.remove(c.id) } })) {
-            HStack {
-                Text(c.name).lineLimit(1)
-                if !c.active { Text("paused").font(.caption2).foregroundStyle(.secondary) }
-                Spacer()
-                if let s = c.spend30, s > 0 {
-                    Text(String(format: "%.2f %@ · 30d", s, c.currency)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+        HStack {
+            Toggle(isOn: Binding(get: { trackAll || selected.contains(c.id) },
+                                 set: { on in if on { selected.insert(c.id) } else { selected.remove(c.id) } })) {
+                HStack {
+                    Text(c.name).lineLimit(1)
+                    if !c.active { Text("paused").font(.caption2).foregroundStyle(.secondary) }
+                    Spacer()
+                    if let s = c.spend30, s > 0 {
+                        Text(String(format: "%.2f %@ · 30d", s, c.currency)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    }
                 }
             }
+            .toggleStyle(.checkbox).disabled(trackAll)
+            TextField("", text: Binding(get: { apps[c.id] ?? "" }, set: { apps[c.id] = $0 }), prompt: Text("App: auto"))
+                .textFieldStyle(.roundedBorder).controlSize(.small).frame(width: 120)
         }
-        .toggleStyle(.checkbox)
     }
 }

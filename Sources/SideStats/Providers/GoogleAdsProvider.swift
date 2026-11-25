@@ -75,13 +75,16 @@ struct GoogleAdsProvider: Provider {
                     let app = campaign.dict("appCampaignSetting") ?? [:]
                     let m = r.dict("metrics") ?? [:]
                     let cost = m.num("costMicros")
-                    let key: AppKey
+                    var key: AppKey
                     switch (app.str("appStore"), app.str("appId")) {
                     case ("APPLE_APP_STORE", let id?) where !Self.digits(id).isEmpty: key = AppKey(platform: .ios, storeId: Self.digits(id))
                     case ("GOOGLE_APP_STORE", let id?) where !id.isEmpty: key = AppKey(platform: .android, storeId: id)
                     default: key = .unassigned
                     }
-                    if key != .unassigned, let name = campaign.str("name") {
+                    if let assigned = c.assignedApp(cid, campaign.str("id")) {
+                        key = assigned
+                        result.names.append(.init(app: key, name: String(key.storeId.dropFirst("campaign-app:".count)), priority: 50))
+                    } else if key != .unassigned, let name = campaign.str("name") {
                         result.names.append(.init(app: key, name: name, priority: 0))   // store names win
                     }
                     result.rows.append(MetricRow(date: date, app: key, source: kind,
