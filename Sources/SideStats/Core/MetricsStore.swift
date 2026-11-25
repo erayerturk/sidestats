@@ -31,6 +31,7 @@ final class MetricsStore: ObservableObject {
     @Published private(set) var totals = Totals()
     @Published private(set) var series: [DailyPoint] = []
     @Published private(set) var missingCurrencies: [String] = []
+    @Published private(set) var campaigns: [CampaignSummary] = []
 
     private var results: [SourceKind: ProviderResult] = [:]
     private var rates: [String: Double] = [:]
@@ -86,6 +87,7 @@ final class MetricsStore: ObservableObject {
             switch r {
             case .success(let res):
                 out.rows += res.rows; out.names += res.names
+                if let c = res.campaigns { out.campaigns = (out.campaigns ?? []) + c }
                 errors += (res.warnings ?? []).map { accounts.count > 1 ? "\(name): \($0)" : $0 }
             case .failure(let e):
                 errors.append(accounts.count > 1 ? "\(name): \(e.localizedDescription)" : e.localizedDescription)
@@ -162,6 +164,7 @@ final class MetricsStore: ObservableObject {
         var totals: Totals
         var series: [DailyPoint]
         var missingCurrencies: [String]
+        var campaigns: [CampaignSummary] = []
     }
 
     func recompute() {
@@ -170,6 +173,7 @@ final class MetricsStore: ObservableObject {
         totals = snap.totals
         series = snap.series
         missingCurrencies = snap.missingCurrencies
+        campaigns = snap.campaigns
     }
 
     /// Aggregates for any range without changing the sidebar's selection.
@@ -187,7 +191,13 @@ final class MetricsStore: ObservableObject {
         let active = Set(configuredSources)
         let hidden = Set(config.hiddenApps)
         var byKey: [AppKey: (Totals, [String: (Double, Double)])] = [:]
+        var camps: [String: CampaignSummary] = [:]
         for (kind, result) in results where active.contains(kind) {
+            for info in result.campaigns ?? [] where !hidden.contains(info.app.id) {
+                camps[info.id] = CampaignSummary(id: info.id, name: info.name, source: info.source,
+                                                 appName: info.app == .unassigned ? nil : displayName(info.app),
+                                                 state: info.state, totals: Totals())
+            }
             for row in result.rows where row.date >= start && row.date <= end && !hidden.contains(row.app.id) {
                 var entry = byKey[row.app] ?? (Totals(), [:])
                 let t = Totals(adRevenue: conv(row.adRevenue, row.currency),
@@ -196,6 +206,14 @@ final class MetricsStore: ObservableObject {
                                downloads: row.downloads, impressions: row.impressions,
                                adImpressions: row.adImpressions, clicks: row.clicks, installs: row.installs)
                 entry.0 = entry.0 + t
+                if !row.campaign.isEmpty {
+                    var cs = camps[row.campaign] ?? CampaignSummary(id: row.campaign, name: row.campaign, source: row.source,
+                                                                    appName: row.app == .unassigned ? nil : displayName(row.app),
+                                                                    state: .unknown, totals: Totals())
+                    cs.totals = cs.totals + t
+                    cs.daily[row.date] = (cs.daily[row.date] ?? Totals()) + t
+                    camps[row.campaign] = cs
+                }
                 let d = entry.1[row.date] ?? (0, 0)
                 entry.1[row.date] = (d.0 + t.revenue, d.1 + t.spend)
                 byKey[row.app] = entry
@@ -240,7 +258,15 @@ final class MetricsStore: ObservableObject {
             groups: list,
             totals: list.reduce(Totals()) { $0 + $1.totals },
             series: fill(dailyAll.map { DailyPoint(date: DayFormat.date($0.key)!, revenue: $0.value.0, spend: $0.value.1) }),
-            missingCurrencies: missing.sorted())
+            missingCurrencies: missing.sorted(),
+            campaigns: camps.values.map { c -> CampaignSummary in
+                var c = c
+                c.days = days.map { (DayFormat.date($0)!, c.daily[$0] ?? Totals()) }
+                return c
+            }.sorted {
+                let r: [CampaignState: Int] = [.active: 0, .scheduled: 1, .unknown: 2, .paused: 3, .ended: 4]
+                return (r[$0.state] ?? 9, -$0.totals.spend, $0.name) < (r[$1.state] ?? 9, -$1.totals.spend, $1.name)
+            })
     }
 
     func setHidden(_ hide: Bool, for keys: [AppKey]) {

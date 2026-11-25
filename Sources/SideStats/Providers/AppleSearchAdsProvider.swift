@@ -36,6 +36,7 @@ struct AppleSearchAdsProvider: Provider {
         }
 
         var rows: [MetricRow] = []
+        var infos: [String: CampaignInfo] = [:]
         for org in orgIds where ResourceClaims.claim("asa:\(org)") {
             var offset = 0
             while true {
@@ -55,7 +56,11 @@ struct AppleSearchAdsProvider: Provider {
                 for row in campaigns {
                     let meta = row.dict("metadata") ?? [:]
                     guard c.tracksCampaign(org, meta.str("campaignId")) else { continue }
+                    let cKey = "\(org):\(meta.str("campaignId") ?? "")"
                     let key = c.assignedApp(org, meta.str("campaignId")) ?? meta.str("adamId").map { AppKey(platform: .ios, storeId: $0) } ?? .unassigned
+                    let st: CampaignState = meta.str("campaignStatus") == "PAUSED" ? .paused
+                        : (meta.str("displayStatus") == "RUNNING" || meta.str("campaignStatus") == "ENABLED" ? .active : .unknown)
+                    infos[cKey] = CampaignInfo(id: cKey, name: meta.str("campaignName") ?? cKey, source: kind, app: key, state: st)
                     for g in row.arr("granularity") {
                         guard let date = g.str("date") else { continue }
                         let spend = g.dict("localSpend") ?? [:]
@@ -64,7 +69,7 @@ struct AppleSearchAdsProvider: Provider {
                                               currency: spend.str("currency") ?? "USD",
                                               spend: spend.num("amount"),
                                               adImpressions: Int(g.num("impressions")), clicks: Int(g.num("taps")),
-                                              installs: installs))
+                                              installs: installs, campaign: cKey))
                     }
                 }
                 let total = Int(json.dict("pagination")?.num("totalResults") ?? 0)
@@ -72,6 +77,6 @@ struct AppleSearchAdsProvider: Provider {
                 if campaigns.isEmpty || offset >= total { break }
             }
         }
-        return ProviderResult(rows: rows, names: CampaignAssign.names(rows))
+        return ProviderResult(rows: rows, names: CampaignAssign.names(rows), campaigns: Array(infos.values))
     }
 }

@@ -75,25 +75,40 @@ struct GoogleAdsProvider: Provider {
                     let app = campaign.dict("appCampaignSetting") ?? [:]
                     let m = r.dict("metrics") ?? [:]
                     let cost = m.num("costMicros")
-                    var key: AppKey
-                    switch (app.str("appStore"), app.str("appId")) {
-                    case ("APPLE_APP_STORE", let id?) where !Self.digits(id).isEmpty: key = AppKey(platform: .ios, storeId: Self.digits(id))
-                    case ("GOOGLE_APP_STORE", let id?) where !id.isEmpty: key = AppKey(platform: .android, storeId: id)
-                    default: key = .unassigned
-                    }
+                    var key = Self.appKey(app)
                     if let assigned = c.assignedApp(cid, campaign.str("id")) {
                         key = assigned
                         result.names.append(.init(app: key, name: String(key.storeId.dropFirst("campaign-app:".count)), priority: 50))
                     } else if key != .unassigned, let name = campaign.str("name") {
-                        result.names.append(.init(app: key, name: name, priority: 0))   // store names win
+                        result.names.append(.init(app: key, name: Self.appName(fromCampaign: name), priority: 0))   // store names win
                     }
                     result.rows.append(MetricRow(date: date, app: key, source: kind,
                                                  currency: r.dict("customer")?.str("currencyCode") ?? "USD",
                                                  spend: cost / 1_000_000,
                                                  adImpressions: Int(m.num("impressions")), clicks: Int(m.num("clicks")),
-                                                     installs: m.num("conversions")))
+                                                     installs: m.num("conversions"), campaign: "\(cid):\(campaign.str("id") ?? "")"))
                 }
                 okAccounts += 1
+                // Every campaign (also ones without delivery yet), for the sidebar's campaign list.
+                let list: [[String: Any]]
+                do { list = try await Self.campaignList(cid, token: token, headers: headers) } catch {
+                    NSLog("SideStats: Google Ads campaign list failed for %@: %@", cid, error.localizedDescription)
+                    list = []
+                }
+                do {
+                    for r in list {
+                        guard let camp = r.dict("campaign"), let id = camp.str("id") else { continue }
+                        let appKey = Self.appKey(camp.dict("appCampaignSetting") ?? [:])
+                        if appKey != .unassigned, let name = camp.str("name") {
+                            result.names.append(.init(app: appKey, name: Self.appName(fromCampaign: name), priority: 0))
+                        }
+                        guard c.tracksCampaign(cid, id) else { continue }
+                        result.campaigns = (result.campaigns ?? []) + [CampaignInfo(
+                            id: "\(cid):\(id)", name: camp.str("name") ?? id, source: kind,
+                            app: c.assignedApp(cid, id) ?? appKey,
+                            state: Self.state(status: camp.str("status"), serving: camp.str("servingStatus")))]
+                    }
+                }
             } catch {
                 errors.append("\(cid): \(error.localizedDescription)")
             }
@@ -101,6 +116,40 @@ struct GoogleAdsProvider: Provider {
         if okAccounts == 0, !errors.isEmpty { throw SideStatsError("Google Ads — " + errors.joined(separator: "\n")) }
         if !errors.isEmpty { result.warnings = errors }
         return result
+    }
+
+    static func appKey(_ app: [String: Any]) -> AppKey {
+        switch (app.str("appStore"), app.str("appId")) {
+        case ("APPLE_APP_STORE", let id?) where !digits(id).isEmpty: return AppKey(platform: .ios, storeId: digits(id))
+        case ("GOOGLE_APP_STORE", let id?) where !id.isEmpty: return AppKey(platform: .android, storeId: id)
+        default: return .unassigned
+        }
+    }
+
+    /// "Pixel Knight - Android - TR - Launch" → "Pixel Knight" (a fallback name until a store source names the app).
+    static func appName(fromCampaign name: String) -> String {
+        let first = name.components(separatedBy: " - ").first?.trimmingCharacters(in: .whitespaces) ?? ""
+        return first.isEmpty ? name : first
+    }
+
+    static func state(status: String?, serving: String?) -> CampaignState {
+        switch (status, serving) {
+        case ("PAUSED", _): return .paused
+        case (_, "ENDED"): return .ended
+        case (_, "PENDING"): return .scheduled
+        case ("ENABLED", _): return .active
+        default: return .unknown
+        }
+    }
+
+    static func campaignList(_ cid: String, token: String, headers: [String: String]) async throws -> [[String: Any]] {
+        let base = "campaign.id, campaign.name, campaign.status, campaign.app_campaign_setting.app_id, campaign.app_campaign_setting.app_store"
+        do {
+            return try await search(cid, "SELECT \(base), campaign.serving_status FROM campaign WHERE campaign.status != 'REMOVED'",
+                                    token: token, headers: headers)
+        } catch {
+            return try await search(cid, "SELECT \(base) FROM campaign WHERE campaign.status != 'REMOVED'", token: token, headers: headers)
+        }
     }
 
     static func call(_ req: URLRequest) async throws -> [String: Any] {

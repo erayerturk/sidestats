@@ -86,11 +86,46 @@ struct MetricRow: Codable, Hashable {
     var adImpressions: Int = 0
     var clicks: Int = 0           // clicks / taps
     var installs: Double = 0      // attributed installs / conversions (may be fractional)
+    var campaign: String = ""     // "<ad account>:<campaign id>" for ad campaign rows
+}
+
+/// An ad campaign as listed by its network, so campaigns without delivery yet still show.
+struct CampaignInfo: Codable, Hashable {
+    var id: String            // "<ad account>:<campaign id>"
+    var name: String
+    var source: SourceKind
+    var app: AppKey
+    var state: CampaignState
+}
+
+enum CampaignState: String, Codable {
+    case active, scheduled, paused, ended, unknown
+
+    var label: String {
+        switch self {
+        case .active: return "Active"
+        case .scheduled: return "Not started"
+        case .paused: return "Paused"
+        case .ended: return "Ended"
+        case .unknown: return ""
+        }
+    }
+}
+
+struct CampaignSummary: Identifiable {
+    var id: String
+    var name: String
+    var source: SourceKind
+    var appName: String?
+    var state: CampaignState
+    var totals: Totals
+    var daily: [String: Totals] = [:]
+    var days: [(date: Date, totals: Totals)] = []   // every day of the range, filled
 }
 
 extension MetricRow {
     private enum CodingKeys: String, CodingKey {
-        case date, app, source, currency, adRevenue, iapRevenue, spend, downloads, impressions, adImpressions, clicks, installs
+        case date, app, source, currency, adRevenue, iapRevenue, spend, downloads, impressions, adImpressions, clicks, installs, campaign
     }
     /// Lenient: rows cached by older versions lack the newer fields.
     init(from decoder: Decoder) throws {
@@ -107,6 +142,7 @@ extension MetricRow {
         adImpressions = try c.decodeIfPresent(Int.self, forKey: .adImpressions) ?? 0
         clicks = try c.decodeIfPresent(Int.self, forKey: .clicks) ?? 0
         installs = try c.decodeIfPresent(Double.self, forKey: .installs) ?? 0
+        campaign = try c.decodeIfPresent(String.self, forKey: .campaign) ?? ""
     }
 }
 
@@ -120,6 +156,7 @@ struct AppNameHint: Codable, Hashable {
 struct ProviderResult: Codable {
     var rows: [MetricRow] = []
     var names: [AppNameHint] = []
+    var campaigns: [CampaignInfo]? = nil
     /// Partial failures (e.g. one of several custom sources failed).
     var warnings: [String]?
 }

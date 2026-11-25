@@ -18,6 +18,7 @@ struct MetaAdsProvider: Provider {
             .map { $0.hasPrefix("act_") ? $0 : "act_\($0)" }
 
         var rows: [MetricRow] = []
+        var infos: [CampaignInfo] = []
         for act in accounts where ResourceClaims.claim("meta:\(act)") {
             // campaign id -> app, from ad sets' promoted_object
             var campaignApp: [String: AppKey] = [:]
@@ -25,6 +26,20 @@ struct MetaAdsProvider: Provider {
                 guard let cid = adset.str("campaign_id"), let po = adset.dict("promoted_object"),
                       let url = po.str("object_store_url"), let key = StoreURL.appKey(from: url) else { continue }
                 campaignApp[cid] = key
+            }
+
+            for camp in (try? await paged("\(Self.graph)/\(act)/campaigns?fields=id,name,effective_status&limit=500", token)) ?? [] {
+                guard let id = camp.str("id"), c.tracksCampaign(act, id), camp.str("effective_status") != "DELETED" else { continue }
+                let st: CampaignState
+                switch camp.str("effective_status") ?? "" {
+                case "ACTIVE": st = .active
+                case "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED": st = .paused
+                case "ARCHIVED", "COMPLETED": st = .ended
+                case "PENDING_REVIEW", "IN_PROCESS", "PREAPPROVED": st = .scheduled
+                default: st = .unknown
+                }
+                infos.append(CampaignInfo(id: "\(act):\(id)", name: camp.str("name") ?? id, source: kind,
+                                          app: c.assignedApp(act, id) ?? campaignApp[id] ?? .unassigned, state: st))
             }
 
             let range = "{\"since\":\"\(start)\",\"until\":\"\(end)\"}"
@@ -40,10 +55,10 @@ struct MetaAdsProvider: Provider {
                                       currency: r.str("account_currency") ?? "USD",
                                       spend: r.num("spend"),
                                       adImpressions: Int(r.num("impressions")), clicks: Int(r.num("clicks")),
-                                      installs: installs))
+                                      installs: installs, campaign: "\(act):\(r.str("campaign_id") ?? "")"))
             }
         }
-        return ProviderResult(rows: rows, names: CampaignAssign.names(rows))
+        return ProviderResult(rows: rows, names: CampaignAssign.names(rows), campaigns: infos)
     }
 
     private func paged(_ first: String, _ token: String) async throws -> [[String: Any]] {

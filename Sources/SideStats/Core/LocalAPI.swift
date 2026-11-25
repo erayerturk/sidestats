@@ -791,6 +791,10 @@ final class LocalAPIServer: ObservableObject {
                 if includeSeries { a["series"] = series(g.series) }
                 return a
             },
+            "campaigns": snap.campaigns.map { c -> [String: Any] in
+                ["id": c.id, "name": c.name, "source": c.source.rawValue, "app": c.appName ?? NSNull(),
+                 "state": c.state.rawValue, "totals": totals(c.totals)]
+            },
             "sources": store.configuredSources.map { k -> [String: Any] in
                 let s = store.status[k] ?? .init()
                 return ["source": k.rawValue, "lastSuccess": iso(s.lastSuccess), "error": s.error ?? NSNull(), "loading": s.loading]
