@@ -52,6 +52,8 @@ The sidebar is a stack of modules. *Apps & Revenue* is the built-in one, and you
 - **Tasks:** a built-in to-do module with natural-language quick add ("call bank tomorrow 10am !!"), two-way Apple Reminders sync and due-date notifications.
 
 Settings → **Modules**. Full reference and ready-made examples: [WIDGETS.md](WIDGETS.md) · [examples/](examples/).
+Settings → Modules → **JSON examples…** shows a copyable example for every item type with a live preview;
+edit the JSON and add it as a module in one click.
 
 ## Automation: local API & MCP
 
@@ -195,6 +197,24 @@ Spend is attributed to apps by campaign `adamId`.
 Spend is attributed to an app through the ad set's promoted app (app install and app event campaigns).
 Other spend shows up as *Unattributed ad spend*.
 
+### Any other ad network or app (custom revenue sources)
+Settings → **Custom** turns any API, script or pushed JSON into a revenue / ad spend source for
+*Apps & Revenue*. Rows are merged by app name (or store id) with the built-in sources.
+
+```json
+{ "currency": "USD",
+  "rows": [ { "date": "2026-11-24", "app": "Puzzle Pop", "platform": "ios",
+              "adRevenue": 42.10, "iapRevenue": 12.99, "spend": 18.50, "downloads": 130, "impressions": 15200 } ] }
+```
+
+- Field aliases (`revenue`, `estimated_revenue`, `cost`, `installs`, `day`, `application`, …) mean many APIs work as-is;
+  otherwise map the response with a JavaScript transform (`data => data.report.map(r => ({date: r.day, app: r.title, adRevenue: r.usd}))`).
+- Ready-made: **AppLovin MAX**, **LevelPlay (ironSource)**, any JSON API, script/command, push.
+- Secrets: header lines like `$report_key: …` are kept in the Keychain and usable as `{{$report_key}}` in URLs
+  (for APIs that take keys in the query string) or `$report_key` in commands.
+- Push from anywhere: `POST /v1/revenue/data {"source":"Unity Ads","rows":[…]}` or the MCP tool `push_revenue_data`
+  (unknown source names are created automatically).
+
 ## Architecture
 
 ```
@@ -212,7 +232,7 @@ daily `MetricRow`s keyed by `AppKey` (`ios:<apple id>` / `android:<package>`), t
 `MetricsStore.providers`.
 
 ## Roadmap
-- Google Ads and TikTok Ads spend
+- Google Ads and TikTok Ads spend (possible today via a custom source)
 - RevenueCat as a subscription revenue source
 - Manual recurring costs (servers, tools)
 - Notarized builds and auto-update (Sparkle)

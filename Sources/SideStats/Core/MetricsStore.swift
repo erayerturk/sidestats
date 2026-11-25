@@ -18,7 +18,7 @@ final class MetricsStore: ObservableObject {
     static let fetchDays = 90
     let providers: [Provider] = [
         AppStoreConnectProvider(), GooglePlayProvider(), AdMobProvider(),
-        AppleSearchAdsProvider(), MetaAdsProvider(), DemoProvider(),
+        AppleSearchAdsProvider(), MetaAdsProvider(), CustomRevenueProvider(), DemoProvider(),
     ]
 
     @Published var config = Config.load() { didSet { if config != oldValue { config.save(); recompute() } } }
@@ -58,7 +58,7 @@ final class MetricsStore: ObservableObject {
     var isLoading: Bool { status.values.contains { $0.loading } }
     var hasAnySource: Bool { !configuredSources.isEmpty }
 
-    func refresh() async {
+    func refresh(only kinds: Set<SourceKind>? = nil) async {
         rates = await FXService.shared.rates(base: config.baseCurrency)
         let start = DayFormat.daysAgo(Self.fetchDays - 1), end = DayFormat.daysAgo(0)
         let cfg = config
@@ -68,7 +68,7 @@ final class MetricsStore: ObservableObject {
             Storage.remove("source-\(kind.rawValue).json")
         }
         await withTaskGroup(of: Void.self) { group in
-            for p in providers where p.isConfigured(cfg) {
+            for p in providers where p.isConfigured(cfg) && (kinds?.contains(p.kind) ?? true) {
                 status[p.kind, default: .init()].loading = true
                 status[p.kind, default: .init()].lastAttempt = Date()
                 group.addTask { [p] in
@@ -91,7 +91,7 @@ final class MetricsStore: ObservableObject {
         case .success(let r):
             results[kind] = r
             Storage.save(r, "source-\(kind.rawValue).json")
-            s.lastSuccess = Date(); s.error = nil
+            s.lastSuccess = Date(); s.error = r.warnings?.joined(separator: "\n")
             UserDefaults.standard.set(s.lastSuccess, forKey: "ok-\(kind.rawValue)")
         case .failure(let e):
             s.error = e.localizedDescription
@@ -109,7 +109,7 @@ final class MetricsStore: ObservableObject {
         return best?.name ?? key.storeId
     }
 
-    static func groupId(_ name: String) -> String {
+    nonisolated static func groupId(_ name: String) -> String {
         name.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(String.init).joined()
     }
 

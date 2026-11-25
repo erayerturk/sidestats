@@ -42,6 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaults.standard.set(true, forKey: "onboarded")
             edge.show()
         }
+        // `SideStats --settings [tab]` opens Settings (e.g. --settings custom).
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--settings") {
+            openSettings(tab: args.count > i + 1 ? SettingsTab(rawValue: args[i + 1]) : nil)
+        }
     }
 
     func applicationWillTerminate(_ note: Notification) {

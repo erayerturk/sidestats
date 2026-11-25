@@ -28,6 +28,9 @@ struct Config: Codable, Equatable {
     // Meta Ads
     var metaAdAccounts = ""        // comma separated, with or without act_ prefix
 
+    /// Custom revenue sources (any API / command / pushed JSON), see CustomRevenue.swift
+    var revenueSources: [WidgetConfig] = []
+
     /// AppKey.id -> custom group name (merges apps across platforms or renames them)
     var aliases: [String: String] = [:]
 

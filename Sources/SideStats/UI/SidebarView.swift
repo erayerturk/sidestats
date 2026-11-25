@@ -227,6 +227,7 @@ struct FlowStatus: View {
         case .admob: return "AdMob"
         case .appleSearchAds: return "ASA"
         case .metaAds: return "Meta"
+        case .custom: return "Custom"
         case .demo: return "Demo"
         }
     }

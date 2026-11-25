@@ -6,6 +6,8 @@ struct WidgetSettings: View {
     @State private var selection: String?
     @State private var showImport = false
     @State private var showGallery = false
+    @State private var showExamples = false
+    @AppStorage("settingsTab") private var tab = SettingsTab.widgets.rawValue
 
     var body: some View {
         HSplitView {
@@ -20,6 +22,7 @@ struct WidgetSettings: View {
                 HStack(spacing: 2) {
                     Menu {
                         Button("Browse integrations…") { showGallery = true }
+                        Button("JSON examples…") { showExamples = true }
                         Divider()
                         Button("HTTP API") { add(.http) }
                         Button("Shell command") { add(.command) }
@@ -51,7 +54,10 @@ struct WidgetSettings: View {
                         Text("Modules").font(.title3.weight(.semibold))
                         Text("Add any API or shell command as a sidebar module. Return the SideStats format for full control, or plain JSON and SideStats picks stats, charts or lists for you.")
                             .multilineTextAlignment(.center).foregroundStyle(.secondary).frame(maxWidth: 360)
-                        Button("Browse integrations…") { showGallery = true }.buttonStyle(.borderedProminent)
+                        HStack {
+                            Button("Browse integrations…") { showGallery = true }.buttonStyle(.borderedProminent)
+                            Button("JSON examples…") { showExamples = true }
+                        }
                         Text("Grafana, Prometheus, Uptime Kuma, Docker, SSH servers, GitHub, Stripe and \(max(WidgetPresets.all.count - 7, 0)) more.")
                             .font(.caption).foregroundStyle(.secondary)
                         Link("Widget format reference ↗", destination: URL(string: Links.repo + "/blob/main/WIDGETS.md")!)
@@ -63,6 +69,7 @@ struct WidgetSettings: View {
         }
         .sheet(isPresented: $showImport) { ImportSheet { selection = $0 } }
         .sheet(isPresented: $showGallery) { PresetGallery { selection = $0 } }
+        .sheet(isPresented: $showExamples) { FormatExamplesSheet { selection = $0 } }
     }
 
     private func row(_ id: String) -> some View {
@@ -97,6 +104,11 @@ struct WidgetSettings: View {
             Section("Apps & Revenue") {
                 Text("Built-in module that merges App Store Connect, Google Play, AdMob, Apple Search Ads and Meta Ads data per app. Configure the sources in their own tabs.")
                     .foregroundStyle(.secondary)
+                LabeledContent("Other ad networks & apps") {
+                    Button("Custom sources…") { tab = SettingsTab.custom.rawValue }
+                }
+                Text("AppLovin MAX, LevelPlay, your own backend, a script or pushed JSON — anything that returns daily rows.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show in sidebar", isOn: Binding(
                     get: { !widgets.hidden.contains(WidgetStore.revenueModule) },
                     set: { if $0 { widgets.hidden.remove(WidgetStore.revenueModule) } else { widgets.hidden.insert(WidgetStore.revenueModule) } }))
@@ -128,6 +140,7 @@ struct WidgetEditor: View {
     @EnvironmentObject var widgets: WidgetStore
     let original: WidgetConfig
     @State private var draft: WidgetConfig
+    @State private var showExamples = false
     @State private var headers: String
     @State private var originalHeaders: String
     @State private var preview: [WidgetItem] = []
@@ -210,8 +223,11 @@ struct WidgetEditor: View {
                         Text("Text / raw").tag(WidgetDisplay.text)
                     }
                 } header: { Text("Data") } footer: {
-                    Text("Auto renders the SideStats format as-is; plain JSON becomes stats (numbers/objects), charts (number arrays or rows with a date) or lists (other arrays).")
-                        .font(.caption).foregroundStyle(.secondary)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Auto renders the SideStats format as-is; plain JSON becomes stats (numbers/objects), charts (number arrays or rows with a date) or lists (other arrays).")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("JSON examples…") { showExamples = true }.controlSize(.small)
+                    }
                 }
                 Section {
                     code($draft.transform, placeholder: "data => ({ items: [ item.stat('Users', data.users) ] })", height: draft.transform.isEmpty ? 44 : 150)
@@ -268,6 +284,7 @@ struct WidgetEditor: View {
         .onAppear {
             if let s = widgets.states[original.id], !s.items.isEmpty { preview = s.items } else { test() }
         }
+        .sheet(isPresented: $showExamples) { FormatExamplesSheet() }
     }
 
     private var pushExample: String {

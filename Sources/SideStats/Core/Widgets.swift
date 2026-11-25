@@ -444,26 +444,24 @@ enum WidgetParser {
 enum WidgetFetcher {
     /// Returns parsed JSON, or the raw string when the output isn't JSON.
     static func fetch(_ c: WidgetConfig, headers: String? = nil) async throws -> (payload: Any, raw: Data) {
+        let (headerLines, secrets) = splitHeaders(headers ?? c.headers)
         let data: Data
         switch c.source {
         case .http:
-            let url = expand(c.url.trimmingCharacters(in: .whitespaces))
+            let url = expand(c.url.trimmingCharacters(in: .whitespaces), secrets: secrets, urlEncode: true)
             guard let u = URL(string: url), u.scheme != nil else { throw SideStatsError("Invalid URL") }
             var req = URLRequest(url: u)
             req.httpMethod = c.method
             req.timeoutInterval = 30
             if !c.body.isEmpty {
-                req.httpBody = Data(expand(c.body).utf8)
+                req.httpBody = Data(expand(c.body, secrets: secrets).utf8)
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             }
             req.setValue("application/json", forHTTPHeaderField: "Accept")
-            for line in (headers ?? c.headers).split(whereSeparator: \.isNewline) {
-                let parts = line.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-                if parts.count == 2 { req.setValue(parts[1], forHTTPHeaderField: parts[0]) }
-            }
+            for (k, v) in headerLines { req.setValue(expand(v, secrets: secrets), forHTTPHeaderField: k) }
             (data, _) = try await HTTP.data(req)
         case .command:
-            data = try await run(expand(c.command))
+            data = try await run(expand(c.command), env: secrets)
         case .push:
             // Push widgets get data from the local API / MCP; "fetch" returns the last pushed payload.
             guard let d = try? Data(contentsOf: Storage.dir.appendingPathComponent("widget-\(c.id).raw")) else {
@@ -472,6 +470,27 @@ enum WidgetFetcher {
             data = d
         }
         return (decode(data), data)
+    }
+
+    /// Splits "Name: value" lines into real headers and secrets. Lines whose name starts with `$`
+    /// (e.g. `$api_key: abc`) are secrets: `{{$api_key}}` in URLs/bodies/headers, `$api_key` in commands.
+    static func splitHeaders(_ text: String) -> (headers: [(String, String)], secrets: [String: String]) {
+        var headers: [(String, String)] = [], secrets: [String: String] = [:]
+        for line in text.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2, !parts[0].isEmpty else { continue }
+            if parts[0].hasPrefix("$") { secrets[String(parts[0].dropFirst())] = parts[1] } else { headers.append((parts[0], parts[1])) }
+        }
+        return (headers, secrets)
+    }
+
+    static func expand(_ s: String, secrets: [String: String], urlEncode: Bool = false) -> String {
+        var out = expand(s)
+        for (k, v) in secrets where out.contains("{{$\(k)}}") {
+            let value = urlEncode ? (v.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+?#"))) ?? v) : v
+            out = out.replacingOccurrences(of: "{{$\(k)}}", with: value)
+        }
+        return out
     }
 
     static func decode(_ data: Data) -> Any {
@@ -491,11 +510,14 @@ enum WidgetFetcher {
         return out
     }
 
-    static func run(_ command: String) async throws -> Data {
+    static func run(_ command: String, env: [String: String] = [:]) async throws -> Data {
         try await Task.detached {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/bin/zsh")
             p.arguments = ["-lc", command]
+            if !env.isEmpty {
+                p.environment = ProcessInfo.processInfo.environment.merging(env) { _, new in new }
+            }
             let out = Pipe(), err = Pipe()
             p.standardOutput = out
             p.standardError = err

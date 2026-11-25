@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum SettingsTab: String {
-    case general, widgets, appStore, google, searchAds, meta, api
+    case general, widgets, appStore, google, searchAds, meta, custom, api
 }
 
 struct SettingsView: View {
@@ -18,9 +18,10 @@ struct SettingsView: View {
             GoogleSettings().tabItem { Label("Google", systemImage: "g.circle") }.tag(SettingsTab.google.rawValue)
             SearchAdsSettings().tabItem { Label("Search Ads", systemImage: "magnifyingglass") }.tag(SettingsTab.searchAds.rawValue)
             MetaSettings().tabItem { Label("Meta Ads", systemImage: "m.circle") }.tag(SettingsTab.meta.rawValue)
+            RevenueSourcesSettings().tabItem { Label("Custom", systemImage: "plus.forwardslash.minus") }.tag(SettingsTab.custom.rawValue)
             APISettings().tabItem { Label("API & MCP", systemImage: "terminal") }.tag(SettingsTab.api.rawValue)
         }
-        .frame(width: 720, height: 560)
+        .frame(width: 800, height: 600)
     }
 }
 

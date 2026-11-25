@@ -450,6 +450,39 @@ enum MCPTools {
             return try API.call("GET", "/v1/revenue" + (q.isEmpty ? "" : "?" + q.joined(separator: "&")))
         },
 
+        MCPTool(name: "push_revenue_data", title: "Push revenue rows",
+                description: "Send daily revenue / ad spend rows for any app or ad network into the Apps & Revenue module (merged by app name with App Store, Play, AdMob, Search Ads, Meta). `source` is a source id or a name; a new push source is created for unknown names. Each push replaces that source's rows. Row fields: date (yyyy-MM-dd, required), app, platform (ios|android|mac), storeId, adRevenue, iapRevenue, spend, downloads, impressions, currency (default USD). Example: {\"source\":\"Unity Ads\",\"rows\":[{\"date\":\"2026-11-24\",\"app\":\"Puzzle Pop\",\"platform\":\"ios\",\"adRevenue\":42.1}]}",
+                properties: ["source": str("Revenue source id or name (created if missing)."),
+                             "rows": ["type": "array", "items": ["type": "object"], "description": "Daily rows."] as [String: Any],
+                             "currency": str("Default currency for rows without one (ISO code, default USD).")],
+                required: ["source", "rows"], idempotent: true) { a in
+            try API.call("POST", "/v1/revenue/data", body: a, timeout: 60)
+        },
+
+        MCPTool(name: "add_revenue_source", title: "Add revenue source",
+                description: "Add a revenue / ad spend source that SideStats fetches itself on the revenue refresh interval. Use preset applovin-max (headers \"$report_key: KEY\"), levelplay (headers \"$secretkey: …\\n$refreshToken: …\"), or source http (url, headers, transform) / command (shell command printing rows JSON). Secrets: header lines `$name: value` are usable as {{$name}} in url/body and $name in commands. `transform` is JavaScript `data => rows` mapping any response to rows (fields as in push_revenue_data).",
+                properties: ["name": str("Display name."), "preset": str("Optional preset.", RevenuePreset.all.map(\.id)),
+                             "source": str("Source type.", ["http", "command", "push"]),
+                             "url": str("http: URL (placeholders {{today}}, {{daysAgo:N}}, {{monthStart}}, {{$secret}})."),
+                             "method": str("http method, default GET."), "body": str("http body."),
+                             "command": str("command: zsh command printing JSON."),
+                             "headers": ["type": ["string", "object"], "description": "Header / secret lines, stored in the Keychain."] as [String: Any],
+                             "transform": str("JavaScript mapping the response to rows."),
+                             "jsonPath": str("Path to the rows array after the transform, e.g. data.rows.")]) { a in
+            try API.call("POST", "/v1/revenue/sources", body: a)
+        },
+
+        MCPTool(name: "list_revenue_sources", title: "List revenue sources",
+                description: "List custom revenue sources (id, name, type, preset).",
+                readOnly: true, idempotent: true) { _ in try API.call("GET", "/v1/revenue/sources") },
+
+        MCPTool(name: "remove_revenue_source", title: "Remove revenue source",
+                description: "Delete a custom revenue source and its data.",
+                properties: ["source": str("Source id or name.")], required: ["source"], destructive: true) { a in
+            let ref = ((a["source"] as? String) ?? "").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? ""
+            return try API.call("DELETE", "/v1/revenue/sources/\(ref)")
+        },
+
         MCPTool(name: "notify", title: "Show notification",
                 description: "Show a macOS notification from SideStats (e.g. when a long task finishes).",
                 properties: ["title": str("Notification title."), "body": str("Notification text."),

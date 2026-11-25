@@ -44,7 +44,7 @@ struct AppKey: Hashable, Codable, Comparable {
 }
 
 enum SourceKind: String, Codable, CaseIterable, Identifiable {
-    case appStoreConnect, googlePlay, admob, appleSearchAds, metaAds, demo
+    case appStoreConnect, googlePlay, admob, appleSearchAds, metaAds, custom, demo
 
     var id: String { rawValue }
 
@@ -55,6 +55,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable {
         case .admob: return "AdMob"
         case .appleSearchAds: return "Apple Search Ads"
         case .metaAds: return "Meta Ads"
+        case .custom: return "Custom sources"
         case .demo: return "Demo data"
         }
     }
@@ -84,6 +85,8 @@ struct AppNameHint: Codable, Hashable {
 struct ProviderResult: Codable {
     var rows: [MetricRow] = []
     var names: [AppNameHint] = []
+    /// Partial failures (e.g. one of several custom sources failed).
+    var warnings: [String]?
 }
 
 enum DateRangeOption: String, CaseIterable, Identifiable {

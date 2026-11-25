@@ -246,6 +246,28 @@ final class LocalAPIServer: ObservableObject {
             }
 
         case ("GET", 1, "revenue"): return .json(try revenue(req.query))
+        case (_, 2, "revenue"), (_, 3, "revenue"):
+            switch (req.method, rest[1], rest.count == 3 ? rest[2] : nil) {
+            case ("GET", "format", nil):
+                return .json(["format": RevenueFormat.example, "fields": RevenueFormat.fieldHelp])
+            case ("GET", "sources", nil):
+                return .json(["sources": store.config.revenueSources.map(revenueSourceJSON)])
+            case ("POST", "sources", nil):
+                return .json(try createRevenueSource(req.object()), status: 201)
+            case ("DELETE", "sources", let rawId?):
+                let id = rawId.removingPercentEncoding ?? rawId
+                guard let s = store.config.revenueSources.first(where: { $0.id == id || $0.name == id }) else {
+                    throw APIError(404, "No revenue source \(id).", hint: "GET /v1/revenue/sources")
+                }
+                store.config.revenueSources.removeAll { $0.id == s.id }
+                s.headers = ""
+                try? FileManager.default.removeItem(at: CustomRevenue.pushPath(s.id))
+                await store.refresh(only: [.custom])
+                return .json(["ok": true, "deleted": s.id])
+            case ("POST", "data", nil), ("PUT", "data", nil):
+                return .json(try await pushRevenue(req.object()))
+            default: throw methodNotAllowed(req)
+            }
         case ("POST", 1, "notify"): return .json(try await notify(req.object()))
         case ("POST", 1, "panel"): return .json(try panel(req.object()))
         default:
@@ -668,6 +690,78 @@ final class LocalAPIServer: ObservableObject {
     }
 
     // MARK: revenue
+
+    private func revenueSourceJSON(_ s: WidgetConfig) -> [String: Any] {
+        var d: [String: Any] = ["id": s.id, "name": s.name, "source": s.source.rawValue, "enabled": s.enabled,
+                                "preset": s.preset, "transform": s.transform, "jsonPath": s.jsonPath]
+        if s.source == .http { d["url"] = s.url; d["method"] = s.method }
+        if s.source == .command { d["command"] = s.command }
+        return d
+    }
+
+    private func createRevenueSource(_ o: [String: Any]) throws -> [String: Any] {
+        var s: WidgetConfig
+        var headers = ""
+        if let pid = o["preset"] as? String, !pid.isEmpty {
+            guard let p = RevenuePreset.preset(pid) else {
+                throw APIError(400, "Unknown preset \(pid).", hint: "Presets: " + RevenuePreset.all.map(\.id).joined(separator: ", "))
+            }
+            s = p.make(); headers = p.headers
+        } else {
+            let src = WidgetSourceType(rawValue: (o["source"] as? String) ?? "") ??
+                (o["url"] != nil ? .http : o["command"] != nil ? .command : .push)
+            s = CustomRevenue.makeSource(name: "Custom source", source: src)
+        }
+        if let v = o["name"] as? String, !v.isEmpty { s.name = v }
+        if let v = o["url"] as? String { s.url = v }
+        if let v = o["method"] as? String { s.method = v.uppercased() }
+        if let v = o["body"] as? String { s.body = v }
+        if let v = o["command"] as? String { s.command = v }
+        if let v = o["transform"] as? String { s.transform = v }
+        if let v = o["jsonPath"] as? String { s.jsonPath = v }
+        if let v = o["enabled"] as? Bool { s.enabled = v }
+        if let h = o["headers"] as? String { headers = h }
+        else if let h = o["headers"] as? [String: Any] { headers = h.map { "\($0.key): \($0.value)" }.joined(separator: "\n") }
+        if !headers.isEmpty { s.headers = headers }
+        store.config.revenueSources.append(s)
+        if s.source != .push { Task { await store.refresh(only: [.custom]) } }
+        return revenueSourceJSON(s)
+    }
+
+    /// Body: {"source": id or name (created as a push source if missing), "rows": [...] | "data": <any JSON>}
+    private func pushRevenue(_ o: [String: Any]) async throws -> [String: Any] {
+        guard let ref = (o["source"] as? String)?.trimmingCharacters(in: .whitespaces), !ref.isEmpty else {
+            throw APIError(400, "'source' (id or name) is required.")
+        }
+        guard let payload: Any = o["data"] ?? o["rows"].map({ rows -> Any in
+            var d: [String: Any] = ["rows": rows]
+            if let c = o["currency"] { d["currency"] = c }
+            return d
+        }) else { throw APIError(400, "Send 'rows' (array) or 'data' (any JSON).", hint: "GET /v1/revenue/format") }
+        var src = store.config.revenueSources.first { $0.id == ref || $0.name.caseInsensitiveCompare(ref) == .orderedSame }
+        if src == nil {
+            src = CustomRevenue.makeSource(name: ref, source: .push)
+            store.config.revenueSources.append(src!)
+        }
+        let s = src!
+        guard s.source == .push else {
+            throw APIError(400, "'\(s.name)' fetches its own data (\(s.source.rawValue)); push only works for push sources.")
+        }
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.fragmentsAllowed])
+        let parsed: ProviderResult
+        do {
+            let value = try WidgetTransform.apply(s.transform, to: payload)
+            parsed = try RevenueFormat.parse(s.jsonPath.isEmpty ? value : WidgetParser.select(value, path: s.jsonPath), sourceName: s.name)
+        } catch {
+            throw APIError(422, error.localizedDescription, hint: "GET /v1/revenue/format")
+        }
+        try data.write(to: CustomRevenue.pushPath(s.id))
+        await store.refresh(only: [.custom])
+        let dates = parsed.rows.map(\.date).sorted()
+        return ["ok": true, "source": s.id, "name": s.name, "rows": parsed.rows.count,
+                "apps": Array(Set(parsed.names.map(\.name))).sorted(),
+                "from": dates.first ?? "", "to": dates.last ?? ""]
+    }
 
     private func revenue(_ q: [String: String]) throws -> [String: Any] {
         var range = store.range
