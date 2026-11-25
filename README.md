@@ -19,7 +19,7 @@ The build is not notarized yet, so on first launch: right-click the app → **Op
 Build from source (Xcode 16+, macOS 14+):
 
 ```sh
-./scripts/build-app.sh --dmg   # → dist/SideStats.app, dist/SideStats.dmg
+./scripts/build-app.sh --dmg   # → dist/SideStats.app, dist/SideStats-<version>.dmg
 ```
 
 No accounts yet? Click **Try with demo data** in the sidebar.

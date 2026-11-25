@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <!-- Hardened runtime: EventKit (Tasks ↔ Reminders) needs this to ask for access. -->
+  <key>com.apple.security.personal-information.calendars</key><true/>
+  <!-- JavaScriptCore JIT for widget transforms (falls back to the interpreter without it). -->
+  <key>com.apple.security.cs.allow-jit</key><true/>
+</dict></plist>

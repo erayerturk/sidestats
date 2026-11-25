@@ -34,14 +34,36 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 
-# Ad-hoc sign by default; set SIGN_IDENTITY="Developer ID Application: ..." to sign for notarization.
-codesign --force --options runtime --timestamp=none --sign "${SIGN_IDENTITY:--}" "$APP"
+# Signing:
+#   default            ad-hoc (local use only; Gatekeeper blocks it on other Macs)
+#   SIGN_IDENTITY=...  e.g. "Developer ID Application: Your Name (TEAMID)" — required for --release
+ENT=Resources/SideStats.entitlements
+if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+  codesign --force --options runtime --timestamp --entitlements "$ENT" --sign "$SIGN_IDENTITY" "$APP"
+else
+  codesign --force --options runtime --timestamp=none --entitlements "$ENT" --sign - "$APP"
+fi
 echo "Built $APP ($VERSION)"
 
-if [[ "${1:-}" == "--dmg" ]]; then
-  rm -f dist/SideStats.dmg
+MODE="${1:-}"
+if [[ "$MODE" == "--dmg" || "$MODE" == "--release" ]]; then
+  DMG="dist/SideStats-${VERSION}.dmg"
+  rm -f "$DMG"
   STAGE=$(mktemp -d); cp -R "$APP" "$STAGE/"; ln -s /Applications "$STAGE/Applications"
-  hdiutil create -volname SideStats -srcfolder "$STAGE" -ov -format UDZO dist/SideStats.dmg >/dev/null
+  hdiutil create -volname SideStats -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
   rm -rf "$STAGE"
-  echo "Built dist/SideStats.dmg"
+  echo "Built $DMG"
+fi
+
+# --release: Developer ID sign + notarize + staple, so the DMG opens on any Mac without warnings.
+# One-time setup:  xcrun notarytool store-credentials sidestats --apple-id you@example.com --team-id TEAMID
+#                  (uses an app-specific password from appleid.apple.com)
+if [[ "$MODE" == "--release" ]]; then
+  [[ "${SIGN_IDENTITY:-}" == Developer\ ID\ Application* ]] || { echo "Set SIGN_IDENTITY to your 'Developer ID Application: …' identity" >&2; exit 1; }
+  codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
+  xcrun notarytool submit "$DMG" --keychain-profile "${NOTARY_PROFILE:-sidestats}" --wait
+  xcrun stapler staple "$DMG"
+  spctl --assess --type open --context context:primary-signature -v "$DMG"
+  shasum -a 256 "$DMG"
+  echo "Release ready: $DMG"
 fi
