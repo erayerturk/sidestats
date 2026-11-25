@@ -98,7 +98,8 @@ if [[ "$MODE" == "--release" ]]; then
   spctl --assess --type open --context context:primary-signature -v "$DMG"
   shasum -a 256 "$DMG"
   # Sparkle appcast (signed with the EdDSA key in your Keychain). Upload both files to the GitHub release.
-  APPCAST_DIR=dist/appcast; mkdir -p "$APPCAST_DIR"; cp "$DMG" "$APPCAST_DIR/"
+  # Only the newest release goes in the feed (old DMGs would get this release's download prefix).
+  APPCAST_DIR=dist/appcast; rm -rf "$APPCAST_DIR" dist/appcast.xml; mkdir -p "$APPCAST_DIR"; cp "$DMG" "$APPCAST_DIR/"
   .build/artifacts/sparkle/Sparkle/bin/generate_appcast \
     --download-url-prefix "${DOWNLOAD_PREFIX:-https://github.com/erayerturk/sidestats/releases/download/v${VERSION}/}" \
     -o dist/appcast.xml "$APPCAST_DIR"
