@@ -18,7 +18,7 @@ final class MetricsStore: ObservableObject {
     static let fetchDays = 90
     let providers: [Provider] = [
         AppStoreConnectProvider(), GooglePlayProvider(), AdMobProvider(),
-        AppleSearchAdsProvider(), MetaAdsProvider(), CustomRevenueProvider(), DemoProvider(),
+        AppleSearchAdsProvider(), GoogleAdsProvider(), MetaAdsProvider(), CustomRevenueProvider(), DemoProvider(),
     ]
 
     @Published var config = Config.load() { didSet { if config != oldValue { config.save(); recompute() } } }

@@ -440,7 +440,7 @@ enum MCPTools {
         },
 
         MCPTool(name: "get_revenue", title: "Get app revenue",
-                description: "Revenue, ad revenue, in-app revenue, ad spend, net, ROAS and downloads for the user's apps (App Store, Google Play, AdMob, Search Ads, Meta), as totals and per app, converted to the base currency. Data comes from the sources configured in SideStats.",
+                description: "Revenue, ad revenue, in-app revenue, ad spend, net, ROAS and downloads for the user's apps (App Store, Google Play, AdMob, Apple Search Ads, Google Ads, Meta, custom sources), as totals and per app, converted to the base currency. Data comes from the sources configured in SideStats.",
                 properties: ["range": str("Date range (default: the one selected in the sidebar).", ["7D", "30D", "MTD", "90D"]),
                              "include_series": bool("Include daily revenue/spend series (default false).")],
                 readOnly: true, idempotent: true) { a in

@@ -177,6 +177,14 @@ reports in Play Console. Installs come from `stats/installs`, revenue from `sale
 **AdMob:** estimated earnings and impressions per app (Network report). Apps linked to a store
 listing are merged with their store data automatically.
 
+### Google Ads
+1. In the same Google Cloud project, enable the **Google Ads API** (Explorer access or higher is needed for real accounts).
+2. Settings → Google → turn on *Fetch Google Ads spend*. Leave customer IDs empty to read every account you can access, or list them;
+   if you reach clients through a manager (MCC) account, put its ID in *Manager account ID*.
+3. If you signed in before Google Ads support existed, sign out and in again to grant the `adwords` scope.
+
+App campaigns are matched to their App Store / Play app; other campaigns show as *Unattributed ad spend*.
+
 ### Apple Search Ads
 1. Search Ads → **Account Settings → User Management**: invite an API user (or use yours) with the *API Account Read Only* role.
 2. Generate a key pair:
@@ -232,7 +240,7 @@ daily `MetricRow`s keyed by `AppKey` (`ios:<apple id>` / `android:<package>`), t
 `MetricsStore.providers`.
 
 ## Roadmap
-- Google Ads and TikTok Ads spend (possible today via a custom source)
+- TikTok Ads spend (possible today via a custom source)
 - RevenueCat as a subscription revenue source
 - Manual recurring costs (servers, tools)
 - Notarized builds and auto-update (Sparkle)

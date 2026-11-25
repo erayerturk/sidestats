@@ -18,6 +18,9 @@ struct Config: Codable, Equatable {
     var admobEnabled = true
     var playBucket = ""            // gs://pubsite_prod_rev_... or bare id
     var playNetShare = 0.85        // share of Play gross kept after Google's fee
+    var googleAdsEnabled = false
+    var googleAdsCustomerIds = ""      // comma separated; empty = every accessible account
+    var googleAdsLoginCustomerId = ""  // manager (MCC) id when accessing clients through it
 
     // Apple Search Ads
     var asaClientId = ""
@@ -50,7 +53,7 @@ struct Config: Codable, Equatable {
 }
 
 enum Secret: String {
-    case ascPrivateKey, googleClientSecret, googleRefreshToken, asaPrivateKey, metaAccessToken
+    case ascPrivateKey, googleClientSecret, googleRefreshToken, googleAdsDeveloperToken, asaPrivateKey, metaAccessToken
 
     var value: String? { Keychain.get(rawValue) }
     func set(_ v: String?) { Keychain.set(rawValue, v) }

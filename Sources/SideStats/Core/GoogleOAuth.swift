@@ -10,6 +10,7 @@ actor GoogleOAuth {
     static let scopes = [
         "https://www.googleapis.com/auth/admob.readonly",
         "https://www.googleapis.com/auth/devstorage.read_only",
+        "https://www.googleapis.com/auth/adwords",
     ]
 
     private var accessToken: String?

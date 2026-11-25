@@ -44,7 +44,7 @@ struct AppKey: Hashable, Codable, Comparable {
 }
 
 enum SourceKind: String, Codable, CaseIterable, Identifiable {
-    case appStoreConnect, googlePlay, admob, appleSearchAds, metaAds, custom, demo
+    case appStoreConnect, googlePlay, admob, appleSearchAds, googleAds, metaAds, custom, demo
 
     var id: String { rawValue }
 
@@ -54,6 +54,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable {
         case .googlePlay: return "Google Play"
         case .admob: return "AdMob"
         case .appleSearchAds: return "Apple Search Ads"
+        case .googleAds: return "Google Ads"
         case .metaAds: return "Meta Ads"
         case .custom: return "Custom sources"
         case .demo: return "Demo data"

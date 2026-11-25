@@ -232,11 +232,24 @@ struct GoogleSettings: View {
             } header: {
                 Text("Google account")
             } footer: {
-                Text("Create a “Desktop app” OAuth client in Google Cloud Console and enable the AdMob API and Cloud Storage JSON API.")
+                Text("Create a “Desktop app” OAuth client in Google Cloud Console and enable the AdMob API, Cloud Storage JSON API and (for ad spend) Google Ads API.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("AdMob") {
                 Toggle("Fetch AdMob earnings", isOn: $store.config.admobEnabled)
+            }
+            Section {
+                Toggle("Fetch Google Ads spend", isOn: $store.config.googleAdsEnabled)
+                if store.config.googleAdsEnabled {
+                    TextField("Customer IDs", text: $store.config.googleAdsCustomerIds, prompt: Text("123-456-7890, … (empty = all accessible)"))
+                    TextField("Manager account ID", text: $store.config.googleAdsLoginCustomerId, prompt: Text("optional, if you sign in through an MCC"))
+                    SecretField(title: "Developer token (optional)", secret: .googleAdsDeveloperToken)
+                }
+            } header: {
+                Text("Google Ads")
+            } footer: {
+                Text("Enable the Google Ads API in the same Cloud project. App campaigns are matched to their app; other campaigns count as unattributed spend. Signed in before this was added? Sign out and in again to grant Google Ads access.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 TextField("Cloud Storage URI", text: $store.config.playBucket, prompt: Text("gs://pubsite_prod_rev_…"))
@@ -253,7 +266,7 @@ struct GoogleSettings: View {
                 Text("Play Console → Download reports → Statistics → “Copy Cloud Storage URI”. Install stats and sales reports are read from that bucket.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            SourceFooter(kinds: [.admob, .googlePlay], docs: docsBase + "google-admob--google-play")
+            SourceFooter(kinds: [.admob, .googlePlay, .googleAds], docs: docsBase + "google-admob--google-play")
         }
         .formStyle(.grouped)
     }
