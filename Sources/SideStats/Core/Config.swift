@@ -14,7 +14,8 @@ struct Config: Codable, Equatable {
     var ascVendorNumber = ""
 
     // Google (shared OAuth client for AdMob + Play)
-    var googleClientId = ""
+    var googleClientId = ""          // own OAuth client (advanced); empty = built-in client
+    var googleSignedInClientId = ""  // client the stored refresh token belongs to
     var admobEnabled = true
     var playBucket = ""            // gs://pubsite_prod_rev_... or bare id
     var playNetShare = 0.85        // share of Play gross kept after Google's fee

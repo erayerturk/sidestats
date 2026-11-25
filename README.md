@@ -152,6 +152,8 @@ curl -s "$API/revenue?range=30D" -H "$AUTH"
 
 ## Connecting sources
 
+Each source has a guided screen in Settings: **Google is one click** (AdMob, Play and Google Ads with one sign-in, accounts are discovered automatically), Search Ads keys are generated for you, App Store Connect takes a dropped `.p8`, and Meta lists your ad accounts after you paste a token. Builds without a bundled Google client (e.g. built from source) ask for your own OAuth client instead.
+
 ### App Store Connect
 1. App Store Connect → **Users and Access → Integrations → App Store Connect API → Team Keys**.
 2. Create a key with the **Finance** (or Sales) role and download the `.p8`.

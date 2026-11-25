@@ -16,13 +16,13 @@ actor GoogleOAuth {
     private var accessToken: String?
     private var expiresAt = Date.distantPast
 
-    func accessToken(clientId: String) async throws -> String {
+    func accessToken(config: Config) async throws -> String {
         if let t = accessToken, expiresAt.timeIntervalSinceNow > 60 { return t }
-        guard let refresh = Secret.googleRefreshToken.value, let secret = Secret.googleClientSecret.value else {
+        guard let refresh = Secret.googleRefreshToken.value, let client = GoogleClient.current(config) else {
             throw SideStatsError("Google is not connected. Open Settings → Google → Sign in.")
         }
         let json = try await HTTP.json(HTTP.request("https://oauth2.googleapis.com/token", method: "POST", form: [
-            "client_id": clientId, "client_secret": secret,
+            "client_id": client.id, "client_secret": client.secret,
             "refresh_token": refresh, "grant_type": "refresh_token",
         ])) as? [String: Any] ?? [:]
         guard let token = json.str("access_token") else { throw SideStatsError("Google token refresh failed") }
@@ -37,7 +37,7 @@ actor GoogleOAuth {
     }
 
     /// Runs the interactive browser sign-in and stores the refresh token.
-    func signIn(clientId: String, clientSecret: String) async throws {
+    func signIn(clientId: String, clientSecret: String, storeSecret: Bool = true) async throws {
         let verifier = JWT.base64url(Data((0..<32).map { _ in UInt8.random(in: 0...255) }))
         let challenge = JWT.base64url(Data(SHA256.hash(data: Data(verifier.utf8))))
         let state = UUID().uuidString
@@ -73,7 +73,7 @@ actor GoogleOAuth {
         guard let refresh = json.str("refresh_token") else {
             throw SideStatsError("Google did not return a refresh token")
         }
-        Secret.googleClientSecret.set(clientSecret)
+        if storeSecret { Secret.googleClientSecret.set(clientSecret) }
         Secret.googleRefreshToken.set(refresh)
         accessToken = json.str("access_token")
         expiresAt = Date().addingTimeInterval(json.num("expires_in"))

@@ -7,11 +7,11 @@ struct AdMobProvider: Provider {
     private let api = "https://admob.googleapis.com/v1"
 
     func isConfigured(_ c: Config) -> Bool {
-        c.admobEnabled && !c.googleClientId.isEmpty && Secret.googleRefreshToken.isSet
+        c.admobEnabled && GoogleClient.isConnected(c)
     }
 
     func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
-        let token = try await GoogleOAuth.shared.accessToken(clientId: c.googleClientId)
+        let token = try await GoogleOAuth.shared.accessToken(config: c)
         let accounts = try await HTTP.json(HTTP.request("\(api)/accounts", bearer: token)) as? [String: Any] ?? [:]
         var result = ProviderResult()
 
@@ -82,7 +82,7 @@ struct GooglePlayProvider: Provider {
     let kind = SourceKind.googlePlay
 
     func isConfigured(_ c: Config) -> Bool {
-        !c.playBucket.isEmpty && !c.googleClientId.isEmpty && Secret.googleRefreshToken.isSet
+        !c.playBucket.isEmpty && GoogleClient.isConnected(c)
     }
 
     private func bucket(_ c: Config) -> String {
@@ -91,7 +91,7 @@ struct GooglePlayProvider: Provider {
     }
 
     func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
-        let token = try await GoogleOAuth.shared.accessToken(clientId: c.googleClientId)
+        let token = try await GoogleOAuth.shared.accessToken(config: c)
         let b = bucket(c)
         let months = Set(DayFormat.days(from: start, to: end).map { $0.prefix(7).replacingOccurrences(of: "-", with: "") })
         var result = ProviderResult()

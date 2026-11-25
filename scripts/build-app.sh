@@ -6,6 +6,17 @@ VERSION="${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' 
 [ -z "$VERSION" ] && VERSION=0.1.0
 APP=dist/SideStats.app
 
+# Release-only settings kept out of git (e.g. the built-in Google OAuth client for one-click sign-in):
+#   SIDESTATS_GOOGLE_CLIENT_ID=…apps.googleusercontent.com
+#   SIDESTATS_GOOGLE_CLIENT_SECRET=GOCSPX-…
+RELEASE_ENV="${RELEASE_ENV:-$HOME/.sidestats-signing/release.env}"
+[[ -f "$RELEASE_ENV" ]] && source "$RELEASE_ENV"
+GOOGLE_PLIST=""
+if [[ -n "${SIDESTATS_GOOGLE_CLIENT_ID:-}" && -n "${SIDESTATS_GOOGLE_CLIENT_SECRET:-}" ]]; then
+  GOOGLE_PLIST="<key>SSGoogleClientID</key><string>${SIDESTATS_GOOGLE_CLIENT_ID}</string>
+  <key>SSGoogleClientSecret</key><string>${SIDESTATS_GOOGLE_CLIENT_SECRET}</string>"
+fi
+
 # --release picks the Developer ID certificate automatically (by hash, avoids name/Unicode issues).
 if [[ "${1:-}" == "--release" && -z "${SIGN_IDENTITY:-}" ]]; then
   SIGN_IDENTITY=$(security find-identity -v -p codesigning | awk '/Developer ID Application/ {print $2; exit}')
@@ -37,6 +48,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.business</string>
+  ${GOOGLE_PLIST}
   <key>SUFeedURL</key><string>${FEED_URL:-https://github.com/erayerturk/sidestats/releases/latest/download/appcast.xml}</string>
   <key>SUPublicEDKey</key><string>Hq5evmzgE4QYlL3Ib4TSUtr98eusBGVgTACEhSDypp8=</string>
   <key>SUEnableAutomaticChecks</key><true/>

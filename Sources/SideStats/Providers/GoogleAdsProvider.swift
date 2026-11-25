@@ -10,13 +10,13 @@ struct GoogleAdsProvider: Provider {
     private var api: String { "https://googleads.googleapis.com/\(Self.version)" }
 
     func isConfigured(_ c: Config) -> Bool {
-        c.googleAdsEnabled && !c.googleClientId.isEmpty && Secret.googleRefreshToken.isSet
+        c.googleAdsEnabled && GoogleClient.isConnected(c)
     }
 
     static func digits(_ s: String) -> String { s.filter(\.isNumber) }
 
     func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
-        let token = try await GoogleOAuth.shared.accessToken(clientId: c.googleClientId)
+        let token = try await GoogleOAuth.shared.accessToken(config: c)
         var headers: [String: String] = [:]
         if let dev = Secret.googleAdsDeveloperToken.value, !dev.isEmpty { headers["developer-token"] = dev }
         let login = Self.digits(c.googleAdsLoginCustomerId)
