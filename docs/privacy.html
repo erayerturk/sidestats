@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SideStats — Privacy policy</title><link rel="stylesheet" href="style.css"></head><body><main>
+<h1>Privacy policy</h1><p>Last updated: November 25, 2026</p>
+<h2>Summary</h2>
+<p>SideStats is a macOS app that runs entirely on your computer. It has no backend server, no analytics and no tracking. The developer of SideStats never receives your data.</p>
+<h2>Data SideStats accesses</h2>
+<ul>
+<li><b>Google user data</b> (only after you click “Sign in with Google”): AdMob earnings reports (<code>admob.readonly</code>), Google Play reports in your Play developer Cloud Storage bucket (<code>devstorage.read_only</code>) and Google Ads campaign statistics (<code>adwords</code>, used read-only).</li>
+<li>Apple App Store Connect sales reports and Apple Search Ads campaign reports, using API keys you create.</li>
+<li>Meta Marketing API ad insights, using an access token you provide.</li>
+<li>Any other API, command or data source you add yourself as a module.</li>
+</ul>
+<h2>How the data is used</h2>
+<p>Data is fetched directly from these services to your Mac and used only to display reports, totals and charts to you inside SideStats. It is cached locally in <code>~/Library/Application Support/SideStats</code>. Credentials and tokens are stored in your macOS Keychain.</p>
+<h2>Sharing</h2>
+<p>SideStats does not transfer, sell or share your data with anyone, does not use it for advertising, and does not use it to train AI or machine-learning models. Data only leaves your Mac when you explicitly configure it to (for example a local MCP client you connect, or a module you set up to call another service).</p>
+<p>SideStats' use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+<h2>Deleting your data</h2>
+<p>Sign out in Settings to delete stored Google tokens; remove keys in each source's settings; delete <code>~/Library/Application Support/SideStats</code> to remove cached data. You can also revoke SideStats' access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+<h2>Updates</h2>
+<p>SideStats checks a public feed on GitHub for app updates. This request contains no personal data.</p>
+<h2>Contact</h2>
+<p>Questions: <a href="https://github.com/erayerturk/sidestats/issues">open an issue on GitHub</a>.</p>
+<footer><a href="index.html">SideStats</a></footer></main></body></html>
