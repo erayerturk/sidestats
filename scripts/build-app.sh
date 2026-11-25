@@ -6,6 +6,12 @@ VERSION="${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' 
 [ -z "$VERSION" ] && VERSION=0.1.0
 APP=dist/SideStats.app
 
+# --release picks the Developer ID certificate automatically (by hash, avoids name/Unicode issues).
+if [[ "${1:-}" == "--release" && -z "${SIGN_IDENTITY:-}" ]]; then
+  SIGN_IDENTITY=$(security find-identity -v -p codesigning | awk '/Developer ID Application/ {print $2; exit}')
+  [[ -n "$SIGN_IDENTITY" ]] || { echo "No 'Developer ID Application' certificate in your keychain. Create one: Xcode → Settings → Accounts → Manage Certificates → + → Developer ID Application" >&2; exit 1; }
+fi
+
 swift build -c release --arch arm64 --arch x86_64
 BIN="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/SideStats"
 
@@ -74,7 +80,6 @@ fi
 # One-time setup:  xcrun notarytool store-credentials sidestats --apple-id you@example.com --team-id TEAMID
 #                  (uses an app-specific password from appleid.apple.com)
 if [[ "$MODE" == "--release" ]]; then
-  [[ "${SIGN_IDENTITY:-}" == Developer\ ID\ Application* ]] || { echo "Set SIGN_IDENTITY to your 'Developer ID Application: …' identity" >&2; exit 1; }
   codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
   xcrun notarytool submit "$DMG" --keychain-profile "${NOTARY_PROFILE:-sidestats}" --wait
   xcrun stapler staple "$DMG"
@@ -85,5 +90,8 @@ if [[ "$MODE" == "--release" ]]; then
   .build/artifacts/sparkle/Sparkle/bin/generate_appcast \
     --download-url-prefix "${DOWNLOAD_PREFIX:-https://github.com/erayerturk/sidestats/releases/download/v${VERSION}/}" \
     -o dist/appcast.xml "$APPCAST_DIR"
-  echo "Release ready: $DMG + dist/appcast.xml (upload both to release v${VERSION})"
+  echo "Release ready: $DMG + dist/appcast.xml"
+  if [[ "${PUBLISH:-}" == "1" ]]; then
+    gh release create "v${VERSION}" "$DMG" dist/appcast.xml --title "SideStats ${VERSION}" --generate-notes
+  fi
 fi

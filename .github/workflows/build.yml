@@ -1,20 +1,16 @@
 name: build
+# CI only checks that the app builds. Releases are signed + notarized locally:
+#   SIGN_IDENTITY="Developer ID Application: …" VERSION=x.y.z ./scripts/build-app.sh --release
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
 jobs:
   build:
     runs-on: macos-15
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - run: ./scripts/build-app.sh --dmg
       - uses: actions/upload-artifact@v4
-        with: { name: SideStats, path: dist/SideStats-*.dmg }
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with: { files: dist/SideStats-*.dmg }
+        with: { name: SideStats-unsigned, path: dist/SideStats-*.dmg }
