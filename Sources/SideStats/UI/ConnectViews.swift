@@ -428,6 +428,7 @@ private struct GoogleAccountSection: View {
                 TextField("Customer IDs", text: $account.googleAdsCustomerIds, prompt: Text("empty = all accessible accounts"))
                 TextField("Manager account ID", text: $account.googleAdsLoginCustomerId, prompt: Text("optional, if you use an MCC"))
                 if ownClient { SecretField(title: "Developer token (optional)", secret: account.secret(.googleAdsDeveloperToken)) }
+                CampaignPickerRow(account: $account, source: .googleAds, load: Connect.googleAdsCampaigns)
             }
             StepRow(number: 1, title: "Google Play reports bucket (optional)", done: !account.playBucket.isEmpty && playError == nil) {
                 Text("Play Console → Download reports → Statistics → **Copy Cloud Storage URI**.").font(.caption).foregroundStyle(.secondary)
@@ -540,6 +541,9 @@ private struct SearchAdsAccountForm: View {
                             importTypes: [UTType(filenameExtension: "pem") ?? .data])
             }
             .font(.caption)
+            if credsDone && keySet {
+                CampaignPickerRow(account: $account, source: .appleSearchAds, load: Connect.searchAdsCampaigns)
+            }
             AccountManageRow(account: $account, namePrompt: "Account name (optional)")
         } header: { Text(account.displayName) }
         .onAppear { keySet = key.isSet }
@@ -648,6 +652,9 @@ private struct MetaAccountForm: View {
                     }
                 }
             }
+            if tokenSet && !selected.isEmpty {
+                CampaignPickerRow(account: $account, source: .metaAds, load: Connect.metaCampaigns)
+            }
             AccountManageRow(account: $account, namePrompt: "Business name (optional)")
         } header: { Text(account.displayName) } footer: {
             Text("Spend is attributed to an app via the ad set's promoted app; other spend shows as “Unattributed”.")
@@ -679,5 +686,142 @@ private struct MetaAccountForm: View {
             }
             busy = false
         }
+    }
+}
+
+// MARK: - Campaign picker
+
+/// "Tracked campaigns" row for an ad account: all campaigns, or only the ones picked in a sheet.
+struct CampaignPickerRow: View {
+    @EnvironmentObject var store: MetricsStore
+    @Binding var account: SourceAccount
+    let source: SourceKind
+    let load: (Config) async throws -> [AdCampaign]
+    @State private var show = false
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Tracked campaigns")
+                Text(account.campaignFilter.map { "\($0.count) selected — new campaigns are not added" } ?? "All campaigns, including new ones")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Choose…") { show = true }.controlSize(.small)
+        }
+        .task {   // demo/automation hook: open the picker for this source
+            if ProcessInfo.processInfo.environment["SIDESTATS_DEMO_CAMPAIGNS"] == source.rawValue { show = true }
+        }
+        .sheet(isPresented: $show) {
+            CampaignPickerSheet(filter: account.campaignFilter, load: { try await load(account.scoped(store.config)) }) { newFilter in
+                show = false
+                guard let newFilter else { return }   // cancelled
+                account.campaignFilter = newFilter.all ? nil : newFilter.ids.sorted()
+                Task { await store.refresh(only: [source]) }
+            }
+        }
+    }
+}
+
+private struct CampaignPickerSheet: View {
+    let filter: [String]?
+    let load: () async throws -> [AdCampaign]
+    let done: ((all: Bool, ids: Set<String>)?) -> Void
+
+    @State private var campaigns: [AdCampaign] = []
+    @State private var selected: Set<String> = []
+    @State private var trackAll = true
+    @State private var loading = true
+    @State private var error: String?
+    @State private var query = ""
+
+    private var groups: [(String, [AdCampaign])] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let shown = campaigns.filter { q.isEmpty || $0.name.lowercased().contains(q) }
+            .sorted { ($0.active ? 0 : 1, -($0.spend30 ?? 0), $0.name) < ($1.active ? 0 : 1, -($1.spend30 ?? 0), $1.name) }
+        return Dictionary(grouping: shown, by: \.group).sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Campaigns to track").font(.headline)
+            Picker("", selection: $trackAll) {
+                Text("All campaigns").tag(true)
+                Text("Only the ones I pick").tag(false)
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            Text(trackAll ? "Every campaign counts, and new campaigns are added automatically."
+                 : "Only checked campaigns count toward spend, ad views, clicks and installs.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            if !trackAll {
+                HStack {
+                    TextField("Search", text: $query).textFieldStyle(.roundedBorder)
+                    Button("Active") { selected = Set(campaigns.filter(\.active).map(\.id)) }
+                    Button("All") { selected = Set(campaigns.map(\.id)) }
+                    Button("None") { selected = [] }
+                }
+                .controlSize(.small)
+            }
+
+            Group {
+                if loading {
+                    ProgressView("Loading campaigns…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error {
+                    Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else if campaigns.isEmpty {
+                    Text("No campaigns found in this account.").foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        ForEach(groups, id: \.0) { group, items in
+                            Section(group) {
+                                ForEach(items) { c in row(c) }
+                            }
+                        }
+                    }
+                    .disabled(trackAll).opacity(trackAll ? 0.55 : 1)
+                }
+            }
+            .frame(minHeight: 260)
+
+            HStack {
+                if !trackAll { Text("\(selected.count) of \(campaigns.count) selected").font(.caption).foregroundStyle(.secondary) }
+                Spacer()
+                Button("Cancel") { done(nil) }.keyboardShortcut(.cancelAction)
+                Button("Save") { done((trackAll, selected)) }.keyboardShortcut(.defaultAction)
+                    .disabled(!trackAll && (selected.isEmpty || loading))
+            }
+        }
+        .padding(16)
+        .frame(width: 540, height: 520)
+        .task {
+            trackAll = filter == nil
+            do {
+                campaigns = try await load()
+                // Start from the saved pick, or from the active campaigns when switching from "all".
+                selected = filter.map(Set.init) ?? Set(campaigns.filter(\.active).map(\.id))
+            } catch {
+                self.error = error.localizedDescription
+                if let filter { selected = Set(filter) }
+            }
+            loading = false
+        }
+    }
+
+    private func row(_ c: AdCampaign) -> some View {
+        Toggle(isOn: Binding(get: { trackAll || selected.contains(c.id) },
+                             set: { on in if on { selected.insert(c.id) } else { selected.remove(c.id) } })) {
+            HStack {
+                Text(c.name).lineLimit(1)
+                if !c.active { Text("paused").font(.caption2).foregroundStyle(.secondary) }
+                Spacer()
+                if let s = c.spend30, s > 0 {
+                    Text(String(format: "%.2f %@ · 30d", s, c.currency)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+        }
+        .toggleStyle(.checkbox)
     }
 }

@@ -5,13 +5,13 @@ import Foundation
 struct AppleSearchAdsProvider: Provider {
     let kind = SourceKind.appleSearchAds
     let accountKind: AccountKind? = .searchAds
-    private let api = "https://api.searchads.apple.com/api/v5"
+    static let api = "https://api.searchads.apple.com/api/v5"
 
     func isConfigured(_ c: Config) -> Bool {
         !c.asaClientId.isEmpty && !c.asaTeamId.isEmpty && !c.asaKeyId.isEmpty && c.hasSecret(.asaPrivateKey)
     }
 
-    private func accessToken(_ c: Config) async throws -> String {
+    static func accessToken(_ c: Config) async throws -> String {
         let now = Int(Date().timeIntervalSince1970)
         let secret = try JWT.es256(
             header: ["alg": "ES256", "kid": c.asaKeyId],
@@ -27,11 +27,11 @@ struct AppleSearchAdsProvider: Provider {
     }
 
     func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
-        let token = try await accessToken(c)
+        let token = try await Self.accessToken(c)
 
         var orgIds = c.asaOrgId.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         if orgIds.isEmpty {
-            let acls = try await HTTP.json(HTTP.request("\(api)/acls", bearer: token)) as? [String: Any] ?? [:]
+            let acls = try await HTTP.json(HTTP.request("\(Self.api)/acls", bearer: token)) as? [String: Any] ?? [:]
             orgIds = acls.arr("data").compactMap { $0.str("orgId") }
         }
 
@@ -47,13 +47,14 @@ struct AppleSearchAdsProvider: Provider {
                         "pagination": ["offset": offset, "limit": 1000],
                     ],
                 ]
-                let req = HTTP.request("\(api)/reports/campaigns", method: "POST", bearer: token, json: body,
+                let req = HTTP.request("\(Self.api)/reports/campaigns", method: "POST", bearer: token, json: body,
                                        headers: ["X-AP-Context": "orgId=\(org)"])
                 let json = try await HTTP.json(req) as? [String: Any] ?? [:]
                 let report = json.dict("data")?.dict("reportingDataResponse") ?? [:]
                 let campaigns = report.arr("row")
                 for row in campaigns {
                     let meta = row.dict("metadata") ?? [:]
+                    guard c.tracksCampaign(org, meta.str("campaignId")) else { continue }
                     let key = meta.str("adamId").map { AppKey(platform: .ios, storeId: $0) } ?? .unassigned
                     for g in row.arr("granularity") {
                         guard let date = g.str("date") else { continue }

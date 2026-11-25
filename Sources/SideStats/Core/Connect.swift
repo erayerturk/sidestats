@@ -120,3 +120,96 @@ enum Connect {
         return out
     }
 }
+
+// MARK: - Campaign lists (for choosing which campaigns to track)
+
+struct AdCampaign: Identifiable, Hashable {
+    var id: String          // "<account>:<campaign id>", the key stored in `SourceAccount.campaignFilter`
+    var name: String
+    var group: String       // ad account / org name
+    var active: Bool
+    var spend30: Double?    // last 30 days, when the API gives it cheaply
+    var currency = ""
+}
+
+extension Connect {
+    static func googleAdsCampaigns(config c: Config) async throws -> [AdCampaign] {
+        let token = try await GoogleOAuth.shared.accessToken(config: c)
+        let headers = GoogleAdsProvider.headers(c)
+        var out: [AdCampaign] = []
+        var firstError: Error?
+        for cid in try await GoogleAdsProvider.customers(c, token: token, headers: headers) {
+            do {
+                let list = try await GoogleAdsProvider.search(cid, """
+                    SELECT customer.descriptive_name, customer.currency_code, campaign.id, campaign.name, campaign.status \
+                    FROM campaign WHERE campaign.status != 'REMOVED'
+                    """, token: token, headers: headers)
+                var spend: [String: Double] = [:]
+                if let m = try? await GoogleAdsProvider.search(cid, """
+                    SELECT campaign.id, metrics.cost_micros FROM campaign WHERE segments.date DURING LAST_30_DAYS
+                    """, token: token, headers: headers) {
+                    for r in m { if let id = r.dict("campaign")?.str("id") { spend[id, default: 0] += (r.dict("metrics")?.num("costMicros") ?? 0) / 1_000_000 } }
+                }
+                for r in list {
+                    guard let camp = r.dict("campaign"), let id = camp.str("id") else { continue }
+                    let cust = r.dict("customer") ?? [:]
+                    out.append(AdCampaign(id: "\(cid):\(id)", name: camp.str("name") ?? id,
+                                          group: cust.str("descriptiveName").map { "\($0) (\(cid))" } ?? cid,
+                                          active: camp.str("status") == "ENABLED", spend30: spend[id] ?? 0,
+                                          currency: cust.str("currencyCode") ?? ""))
+                }
+            } catch {
+                firstError = firstError ?? error   // e.g. a manager account: it has no campaigns of its own
+            }
+        }
+        if out.isEmpty, let firstError { throw firstError }
+        return out
+    }
+
+    static func searchAdsCampaigns(config c: Config) async throws -> [AdCampaign] {
+        let token = try await AppleSearchAdsProvider.accessToken(c)
+        var orgs = c.asaOrgId.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        if orgs.isEmpty {
+            let acls = try await HTTP.json(HTTP.request("\(AppleSearchAdsProvider.api)/acls", bearer: token)) as? [String: Any] ?? [:]
+            orgs = acls.arr("data").compactMap { $0.str("orgId") }
+        }
+        var out: [AdCampaign] = []
+        for org in orgs {
+            let json = try await HTTP.json(HTTP.request("\(AppleSearchAdsProvider.api)/campaigns?limit=1000", bearer: token,
+                                                        headers: ["X-AP-Context": "orgId=\(org)"])) as? [String: Any] ?? [:]
+            for camp in json.arr("data") {
+                guard let id = camp.str("id"), camp.str("deleted") != "1" else { continue }
+                out.append(AdCampaign(id: "\(org):\(id)", name: camp.str("name") ?? id, group: "Org \(org)",
+                                      active: camp.str("status") == "ENABLED" && camp.str("servingStatus") != "NOT_RUNNING",
+                                      spend30: nil))
+            }
+        }
+        return out
+    }
+
+    static func metaCampaigns(config c: Config) async throws -> [AdCampaign] {
+        let token = c.secret(.metaAccessToken) ?? ""
+        var out: [AdCampaign] = []
+        let accounts = c.metaAdAccounts.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }.map { $0.hasPrefix("act_") ? $0 : "act_\($0)" }
+        for act in accounts {
+            var spend: [String: Double] = [:]
+            var next: String? = "\(MetaAdsProvider.graph)/\(act)/insights?level=campaign&date_preset=last_30d&fields=campaign_id,spend&limit=500&access_token=\(token)"
+            while let url = next, let json = try? await HTTP.json(HTTP.request(url)) as? [String: Any] {
+                for r in json.arr("data") { if let id = r.str("campaign_id") { spend[id] = r.num("spend") } }
+                next = json.dict("paging")?.str("next")
+            }
+            next = "\(MetaAdsProvider.graph)/\(act)/campaigns?fields=id,name,effective_status&limit=500&access_token=\(token)"
+            while let url = next {
+                let json = try await HTTP.json(HTTP.request(url)) as? [String: Any] ?? [:]
+                for camp in json.arr("data") {
+                    guard let id = camp.str("id"), camp.str("effective_status") != "DELETED" else { continue }
+                    out.append(AdCampaign(id: "\(act):\(id)", name: camp.str("name") ?? id, group: act,
+                                          active: camp.str("effective_status") == "ACTIVE", spend30: spend[id] ?? 0))
+                }
+                next = json.dict("paging")?.str("next")
+            }
+        }
+        return out
+    }
+}

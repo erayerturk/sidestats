@@ -32,7 +32,7 @@ struct MetaAdsProvider: Provider {
             let url = "\(Self.graph)/\(act)/insights?level=campaign&time_increment=1&limit=500"
                 + "&fields=campaign_id,spend,impressions,clicks,actions,account_currency,date_start&time_range=\(range)"
             for r in try await paged(url, token) {
-                guard let day = r.str("date_start") else { continue }
+                guard let day = r.str("date_start"), c.tracksCampaign(act, r.str("campaign_id")) else { continue }
                 let key = r.str("campaign_id").flatMap { campaignApp[$0] } ?? .unassigned
                 let installs = r.arr("actions").filter { ["mobile_app_install", "app_install", "omni_app_install"].contains($0.str("action_type") ?? "") }
                     .map { $0.num("value") }.max() ?? 0

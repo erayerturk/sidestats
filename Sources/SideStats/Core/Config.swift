@@ -38,6 +38,14 @@ struct Config: Codable, Equatable {
     var accountsMigrated = false
     /// Set on scoped copies only: which account's Keychain items to use.
     var accountId = ""
+    /// Set on scoped copies only: the account's campaign selection (nil = all campaigns).
+    var campaignFilter: [String]? = nil
+
+    /// Whether a campaign ("<account>:<campaign id>") of the scoped account is tracked.
+    func tracksCampaign(_ account: String, _ campaign: String?) -> Bool {
+        guard let f = campaignFilter else { return true }
+        return f.contains("\(account):\(campaign ?? "")")
+    }
 
     /// Custom revenue sources (any API / command / pushed JSON), see CustomRevenue.swift
     var revenueSources: [WidgetConfig] = []

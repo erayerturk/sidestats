@@ -16,20 +16,46 @@ struct GoogleAdsProvider: Provider {
 
     static func digits(_ s: String) -> String { s.filter(\.isNumber) }
 
-    func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
-        let token = try await GoogleOAuth.shared.accessToken(config: c)
+    static func headers(_ c: Config) -> [String: String] {
         var headers: [String: String] = [:]
         if let dev = c.secret(.googleAdsDeveloperToken), !dev.isEmpty { headers["developer-token"] = dev }
-        let login = Self.digits(c.googleAdsLoginCustomerId)
+        let login = digits(c.googleAdsLoginCustomerId)
         if !login.isEmpty { headers["login-customer-id"] = login }
+        return headers
+    }
 
+    /// The configured customer IDs, or every accessible account when none are entered.
+    static func customers(_ c: Config, token: String, headers: [String: String]) async throws -> [String] {
         var customers = c.googleAdsCustomerIds.split(whereSeparator: { $0 == "," || $0.isWhitespace })
-            .map { Self.digits(String($0)) }.filter { !$0.isEmpty }
+            .map { digits(String($0)) }.filter { !$0.isEmpty }
         if customers.isEmpty {
-            let json = try await call(HTTP.request("\(api)/customers:listAccessibleCustomers", bearer: token, headers: headers))
-            customers = ((json["resourceNames"] as? [String]) ?? []).map { Self.digits($0) }
+            let json = try await call(HTTP.request("https://googleads.googleapis.com/\(version)/customers:listAccessibleCustomers",
+                                                   bearer: token, headers: headers))
+            customers = ((json["resourceNames"] as? [String]) ?? []).map { digits($0) }
             if customers.isEmpty { throw SideStatsError("Google Ads: no accessible accounts. Enter customer IDs in Settings → Google.") }
         }
+        return customers
+    }
+
+    /// Runs a GAQL query on one customer, following pages.
+    static func search(_ cid: String, _ query: String, token: String, headers: [String: String]) async throws -> [[String: Any]] {
+        var out: [[String: Any]] = []
+        var pageToken: String?
+        repeat {
+            var body: [String: Any] = ["query": query]
+            if let pageToken { body["pageToken"] = pageToken }
+            let json = try await call(HTTP.request("https://googleads.googleapis.com/\(version)/customers/\(cid)/googleAds:search",
+                                                   method: "POST", bearer: token, json: body, headers: headers))
+            out += (json["results"] as? [[String: Any]]) ?? []
+            pageToken = json.str("nextPageToken")
+        } while pageToken != nil && pageToken != ""
+        return out
+    }
+
+    func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
+        let token = try await GoogleOAuth.shared.accessToken(config: c)
+        let headers = Self.headers(c)
+        let customers = try await Self.customers(c, token: token, headers: headers)
 
         let query = """
         SELECT segments.date, campaign.id, campaign.name, campaign.app_campaign_setting.app_id, \
@@ -42,35 +68,28 @@ struct GoogleAdsProvider: Provider {
         var okAccounts = 0
         for cid in customers where ResourceClaims.claim("gads:\(cid)") {
             do {
-                var pageToken: String?
-                repeat {
-                    var body: [String: Any] = ["query": query]
-                    if let pageToken { body["pageToken"] = pageToken }
-                    let json = try await call(HTTP.request("\(api)/customers/\(cid)/googleAds:search",
-                                                           method: "POST", bearer: token, json: body, headers: headers))
-                    for r in (json["results"] as? [[String: Any]]) ?? [] {
-                        guard let date = r.dict("segments")?.str("date") else { continue }
-                        let campaign = r.dict("campaign") ?? [:]
-                        let app = campaign.dict("appCampaignSetting") ?? [:]
-                        let m = r.dict("metrics") ?? [:]
-                        let cost = m.num("costMicros")
-                        let key: AppKey
-                        switch (app.str("appStore"), app.str("appId")) {
-                        case ("APPLE_APP_STORE", let id?) where !Self.digits(id).isEmpty: key = AppKey(platform: .ios, storeId: Self.digits(id))
-                        case ("GOOGLE_APP_STORE", let id?) where !id.isEmpty: key = AppKey(platform: .android, storeId: id)
-                        default: key = .unassigned
-                        }
-                        if key != .unassigned, let name = campaign.str("name") {
-                            result.names.append(.init(app: key, name: name, priority: 0))   // store names win
-                        }
-                        result.rows.append(MetricRow(date: date, app: key, source: kind,
-                                                     currency: r.dict("customer")?.str("currencyCode") ?? "USD",
-                                                     spend: cost / 1_000_000,
-                                                     adImpressions: Int(m.num("impressions")), clicks: Int(m.num("clicks")),
-                                                     installs: m.num("conversions")))
+                for r in try await Self.search(cid, query, token: token, headers: headers) {
+                    guard let date = r.dict("segments")?.str("date") else { continue }
+                    let campaign = r.dict("campaign") ?? [:]
+                    guard c.tracksCampaign(cid, campaign.str("id")) else { continue }
+                    let app = campaign.dict("appCampaignSetting") ?? [:]
+                    let m = r.dict("metrics") ?? [:]
+                    let cost = m.num("costMicros")
+                    let key: AppKey
+                    switch (app.str("appStore"), app.str("appId")) {
+                    case ("APPLE_APP_STORE", let id?) where !Self.digits(id).isEmpty: key = AppKey(platform: .ios, storeId: Self.digits(id))
+                    case ("GOOGLE_APP_STORE", let id?) where !id.isEmpty: key = AppKey(platform: .android, storeId: id)
+                    default: key = .unassigned
                     }
-                    pageToken = json.str("nextPageToken")
-                } while pageToken != nil && pageToken != ""
+                    if key != .unassigned, let name = campaign.str("name") {
+                        result.names.append(.init(app: key, name: name, priority: 0))   // store names win
+                    }
+                    result.rows.append(MetricRow(date: date, app: key, source: kind,
+                                                 currency: r.dict("customer")?.str("currencyCode") ?? "USD",
+                                                 spend: cost / 1_000_000,
+                                                 adImpressions: Int(m.num("impressions")), clicks: Int(m.num("clicks")),
+                                                     installs: m.num("conversions")))
+                }
                 okAccounts += 1
             } catch {
                 errors.append("\(cid): \(error.localizedDescription)")
@@ -81,7 +100,7 @@ struct GoogleAdsProvider: Provider {
         return result
     }
 
-    private func call(_ req: URLRequest) async throws -> [String: Any] {
+    static func call(_ req: URLRequest) async throws -> [String: Any] {
         do {
             return try await HTTP.json(req) as? [String: Any] ?? [:]
         } catch let e as SideStatsError {
@@ -89,7 +108,7 @@ struct GoogleAdsProvider: Provider {
                 throw SideStatsError("Google Ads needs one more permission: Settings → Google → Sign out, then Sign in again.")
             }
             if e.message.contains("HTTP 404") {
-                throw SideStatsError("Google Ads API \(Self.version) not found (sunset?). Update SideStats. \(e.message.prefix(200))")
+                throw SideStatsError("Google Ads API \(version) not found (sunset?). Update SideStats. \(e.message.prefix(200))")
             }
             if e.message.contains("CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION") {
                 throw SideStatsError(GoogleClient.builtin != nil

@@ -45,6 +45,9 @@ struct SourceAccount: Codable, Equatable, Identifiable {
     // Meta
     var metaAdAccounts = ""
 
+    /// Ad campaigns to track ("<account>:<campaign id>"); nil = every campaign, including new ones.
+    var campaignFilter: [String]? = nil
+
     init(kind: AccountKind) { self.kind = kind }
 
     init(from d: Decoder) throws {
@@ -59,6 +62,7 @@ struct SourceAccount: Codable, Equatable, Identifiable {
         ascIssuerId = v(.ascIssuerId, ""); ascKeyId = v(.ascKeyId, ""); ascVendorNumber = v(.ascVendorNumber, "")
         asaClientId = v(.asaClientId, ""); asaTeamId = v(.asaTeamId, ""); asaKeyId = v(.asaKeyId, ""); asaOrgId = v(.asaOrgId, "")
         metaAdAccounts = v(.metaAdAccounts, "")
+        campaignFilter = (try? c.decodeIfPresent([String].self, forKey: .campaignFilter)) ?? nil
     }
 
     var displayName: String {
@@ -84,6 +88,7 @@ struct SourceAccount: Codable, Equatable, Identifiable {
     func scoped(_ base: Config) -> Config {
         var c = base
         c.accountId = id
+        c.campaignFilter = campaignFilter
         switch kind {
         case .google:
             c.googleSignedInClientId = googleClientId; c.googleClientId = googleClientId
