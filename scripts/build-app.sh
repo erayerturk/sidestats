@@ -9,8 +9,10 @@ APP=dist/SideStats.app
 swift build -c release --arch arm64 --arch x86_64
 BIN="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/SideStats"
 
-rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+BINDIR="$(dirname "$BIN")"
+rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN" "$APP/Contents/MacOS/SideStats"
+ditto "$BINDIR/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -29,6 +31,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.business</string>
+  <key>SUFeedURL</key><string>${FEED_URL:-https://github.com/erayerturk/sidestats/releases/latest/download/appcast.xml}</string>
+  <key>SUPublicEDKey</key><string>Hq5evmzgE4QYlL3Ib4TSUtr98eusBGVgTACEhSDypp8=</string>
+  <key>SUEnableAutomaticChecks</key><true/>
   <key>NSRemindersFullAccessUsageDescription</key><string>SideStats shows and completes your reminders in the sidebar Tasks module.</string>
   <key>NSRemindersUsageDescription</key><string>SideStats shows and completes your reminders in the sidebar Tasks module.</string>
 </dict></plist>
@@ -38,10 +43,20 @@ PLIST
 #   default            ad-hoc (local use only; Gatekeeper blocks it on other Macs)
 #   SIGN_IDENTITY=...  e.g. "Developer ID Application: Your Name (TEAMID)" — required for --release
 ENT=Resources/SideStats.entitlements
+# Sparkle's nested helpers are signed inside-out first (no --deep).
+SPK="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
+for item in "$SPK/XPCServices/Installer.xpc" "$SPK/XPCServices/Downloader.xpc" "$SPK/Autoupdate" "$SPK/Updater.app" "$APP/Contents/Frameworks/Sparkle.framework"; do
+  if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$item"
+  else
+    codesign --force --timestamp=none --sign - "$item"
+  fi
+done
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
   codesign --force --options runtime --timestamp --entitlements "$ENT" --sign "$SIGN_IDENTITY" "$APP"
 else
-  codesign --force --options runtime --timestamp=none --entitlements "$ENT" --sign - "$APP"
+  # no hardened runtime for ad-hoc: library validation would reject the ad-hoc signed Sparkle.framework
+  codesign --force --timestamp=none --entitlements "$ENT" --sign - "$APP"
 fi
 echo "Built $APP ($VERSION)"
 
@@ -65,5 +80,10 @@ if [[ "$MODE" == "--release" ]]; then
   xcrun stapler staple "$DMG"
   spctl --assess --type open --context context:primary-signature -v "$DMG"
   shasum -a 256 "$DMG"
-  echo "Release ready: $DMG"
+  # Sparkle appcast (signed with the EdDSA key in your Keychain). Upload both files to the GitHub release.
+  APPCAST_DIR=dist/appcast; mkdir -p "$APPCAST_DIR"; cp "$DMG" "$APPCAST_DIR/"
+  .build/artifacts/sparkle/Sparkle/bin/generate_appcast \
+    --download-url-prefix "${DOWNLOAD_PREFIX:-https://github.com/erayerturk/sidestats/releases/download/v${VERSION}/}" \
+    -o dist/appcast.xml "$APPCAST_DIR"
+  echo "Release ready: $DMG + dist/appcast.xml (upload both to release v${VERSION})"
 fi

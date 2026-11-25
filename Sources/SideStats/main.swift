@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import SwiftUI
+import Sparkle
 
 // `SideStats --mcp`: run as a stdio MCP server (bridge to the running app's local API). Must run
 // before NSApplication is created; nothing but protocol messages may be written to stdout.
@@ -14,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let widgets = WidgetStore()
     let todos = TodoStore()
     var api: LocalAPIServer!
+    /// Sparkle auto-updates (feed + public key in Info.plist).
+    let updater = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     var edge: EdgePanelController!
     private var statusItem: NSStatusItem!
     private var settingsWindow: NSWindow?
@@ -61,6 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item("Refresh", #selector(refresh), "r"))
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(openSettingsMenu), ","))
+        let upd = NSMenuItem(title: "Check for Updates…", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+        upd.target = updater
+        menu.addItem(upd)
         menu.addItem(item("GitHub / Help", #selector(openHelp), ""))
         menu.addItem(.separator())
         menu.addItem(item("Quit SideStats", #selector(NSApplication.terminate(_:)), "q", target: NSApp))
