@@ -192,7 +192,8 @@ final class MetricsStore: ObservableObject {
                 let t = Totals(adRevenue: conv(row.adRevenue, row.currency),
                                iapRevenue: conv(row.iapRevenue, row.currency),
                                spend: conv(row.spend, row.currency),
-                               downloads: row.downloads, impressions: row.impressions)
+                               downloads: row.downloads, impressions: row.impressions,
+                               adImpressions: row.adImpressions, clicks: row.clicks, installs: row.installs)
                 entry.0 = entry.0 + t
                 let d = entry.1[row.date] ?? (0, 0)
                 entry.1[row.date] = (d.0 + t.revenue, d.1 + t.spend)

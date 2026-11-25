@@ -58,9 +58,12 @@ struct AppleSearchAdsProvider: Provider {
                     for g in row.arr("granularity") {
                         guard let date = g.str("date") else { continue }
                         let spend = g.dict("localSpend") ?? [:]
+                        let installs = g["totalInstalls"] != nil ? g.num("totalInstalls") : g.num("installs")
                         rows.append(MetricRow(date: String(date.prefix(10)), app: key, source: kind,
                                               currency: spend.str("currency") ?? "USD",
-                                              spend: spend.num("amount")))
+                                              spend: spend.num("amount"),
+                                              adImpressions: Int(g.num("impressions")), clicks: Int(g.num("taps")),
+                                              installs: installs))
                     }
                 }
                 let total = Int(json.dict("pagination")?.num("totalResults") ?? 0)

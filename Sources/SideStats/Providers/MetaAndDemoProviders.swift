@@ -30,13 +30,17 @@ struct MetaAdsProvider: Provider {
             let range = "{\"since\":\"\(start)\",\"until\":\"\(end)\"}"
                 .addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
             let url = "\(Self.graph)/\(act)/insights?level=campaign&time_increment=1&limit=500"
-                + "&fields=campaign_id,spend,account_currency,date_start&time_range=\(range)"
+                + "&fields=campaign_id,spend,impressions,clicks,actions,account_currency,date_start&time_range=\(range)"
             for r in try await paged(url, token) {
                 guard let day = r.str("date_start") else { continue }
                 let key = r.str("campaign_id").flatMap { campaignApp[$0] } ?? .unassigned
+                let installs = r.arr("actions").filter { ["mobile_app_install", "app_install", "omni_app_install"].contains($0.str("action_type") ?? "") }
+                    .map { $0.num("value") }.max() ?? 0
                 rows.append(MetricRow(date: day, app: key, source: kind,
                                       currency: r.str("account_currency") ?? "USD",
-                                      spend: r.num("spend")))
+                                      spend: r.num("spend"),
+                                      adImpressions: Int(r.num("impressions")), clicks: Int(r.num("clicks")),
+                                      installs: installs))
             }
         }
         return ProviderResult(rows: rows)

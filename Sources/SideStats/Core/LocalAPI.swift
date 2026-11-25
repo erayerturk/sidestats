@@ -775,7 +775,8 @@ final class LocalAPIServer: ObservableObject {
         let includeSeries = q["series"].flatMap(Self.bool) ?? false
         func totals(_ t: Totals) -> [String: Any] {
             ["revenue": t.revenue, "adRevenue": t.adRevenue, "iapRevenue": t.iapRevenue, "spend": t.spend,
-             "net": t.net, "roas": t.roas ?? NSNull(), "downloads": t.downloads, "impressions": t.impressions]
+             "net": t.net, "roas": t.roas ?? NSNull(), "downloads": t.downloads, "impressions": t.impressions,
+             "adImpressions": t.adImpressions, "clicks": t.clicks, "installs": t.installs]
         }
         func series(_ s: [DailyPoint]) -> [[String: Any]] {
             s.map { ["date": DayFormat.string($0.date), "revenue": $0.revenue, "spend": $0.spend, "net": $0.net] }

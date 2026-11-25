@@ -33,8 +33,9 @@ struct GoogleAdsProvider: Provider {
 
         let query = """
         SELECT segments.date, campaign.id, campaign.name, campaign.app_campaign_setting.app_id, \
-        campaign.app_campaign_setting.app_store, customer.currency_code, customer.descriptive_name, metrics.cost_micros \
-        FROM campaign WHERE segments.date BETWEEN '\(start)' AND '\(end)' AND metrics.cost_micros > 0
+        campaign.app_campaign_setting.app_store, customer.currency_code, customer.descriptive_name, metrics.cost_micros, \
+        metrics.impressions, metrics.clicks, metrics.conversions \
+        FROM campaign WHERE segments.date BETWEEN '\(start)' AND '\(end)' AND metrics.impressions > 0
         """
         var result = ProviderResult()
         var errors: [String] = []
@@ -51,7 +52,8 @@ struct GoogleAdsProvider: Provider {
                         guard let date = r.dict("segments")?.str("date") else { continue }
                         let campaign = r.dict("campaign") ?? [:]
                         let app = campaign.dict("appCampaignSetting") ?? [:]
-                        let cost = Double(r.dict("metrics")?.str("costMicros") ?? "") ?? r.dict("metrics")?.num("costMicros") ?? 0
+                        let m = r.dict("metrics") ?? [:]
+                        let cost = m.num("costMicros")
                         let key: AppKey
                         switch (app.str("appStore"), app.str("appId")) {
                         case ("APPLE_APP_STORE", let id?) where !Self.digits(id).isEmpty: key = AppKey(platform: .ios, storeId: Self.digits(id))
@@ -63,7 +65,9 @@ struct GoogleAdsProvider: Provider {
                         }
                         result.rows.append(MetricRow(date: date, app: key, source: kind,
                                                      currency: r.dict("customer")?.str("currencyCode") ?? "USD",
-                                                     spend: cost / 1_000_000))
+                                                     spend: cost / 1_000_000,
+                                                     adImpressions: Int(m.num("impressions")), clicks: Int(m.num("clicks")),
+                                                     installs: m.num("conversions")))
                     }
                     pageToken = json.str("nextPageToken")
                 } while pageToken != nil && pageToken != ""

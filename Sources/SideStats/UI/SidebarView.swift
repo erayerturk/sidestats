@@ -287,6 +287,21 @@ struct SummaryCard: View {
                 if totals.impressions > 0 { Text("\(Fmt.count(totals.impressions)) impr.") }
             }
             .sfont(.caption2).foregroundStyle(.secondary)
+            if totals.hasCampaignStats {
+                Divider().opacity(0.4)
+                HStack(spacing: 0) {
+                    Stat(title: "Ad views", value: Fmt.count(totals.adImpressions), color: .secondary)
+                    Stat(title: "Clicks", value: Fmt.count(totals.clicks), color: .secondary)
+                    Stat(title: "Installs", value: Fmt.count(Int(totals.installs.rounded())), color: .secondary)
+                }
+                .help("From your ad campaigns (Google Ads, Apple Search Ads, Meta). Installs = attributed installs / conversions.")
+                HStack(spacing: 12) {
+                    if let ctr = totals.ctr { Text("CTR \(ctr.formatted(.percent.precision(.fractionLength(1))))") }
+                    if let cpi = totals.cpi { Text("Cost / install \(Fmt.money(cpi, currency))") }
+                    if totals.clicks > 0, totals.spend > 0 { Text("CPC \(Fmt.money(totals.spend / Double(totals.clicks), currency))") }
+                }
+                .sfont(.caption2).foregroundStyle(.secondary)
+            }
         }
         .padding(12)
         .background(.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
@@ -357,6 +372,17 @@ struct AppRow: View {
                     GridRow {
                         detail("Downloads", group.totals.downloads.formatted())
                         detail("Impressions", group.totals.impressions.formatted())
+                    }
+                    if group.totals.hasCampaignStats {
+                        GridRow {
+                            detail("Ad views", group.totals.adImpressions.formatted())
+                            detail("Clicks", group.totals.clicks.formatted()
+                                   + (group.totals.ctr.map { " · " + $0.formatted(.percent.precision(.fractionLength(1))) } ?? ""))
+                        }
+                        GridRow {
+                            detail("Installs (ads)", Int(group.totals.installs.rounded()).formatted())
+                            detail("Cost / install", group.totals.cpi.map { Fmt.money($0, currency) } ?? "—")
+                        }
                     }
                     if group.totals.downloads > 0 && group.totals.spend > 0 {
                         GridRow {

@@ -73,7 +73,33 @@ struct MetricRow: Codable, Hashable {
     var iapRevenue: Double = 0   // store proceeds: paid apps, IAP, subscriptions
     var spend: Double = 0
     var downloads: Int = 0
-    var impressions: Int = 0
+    var impressions: Int = 0      // ad impressions served in your apps (AdMob, mediation)
+    // Ad campaign delivery (Google Ads, Search Ads, Meta):
+    var adImpressions: Int = 0
+    var clicks: Int = 0           // clicks / taps
+    var installs: Double = 0      // attributed installs / conversions (may be fractional)
+}
+
+extension MetricRow {
+    private enum CodingKeys: String, CodingKey {
+        case date, app, source, currency, adRevenue, iapRevenue, spend, downloads, impressions, adImpressions, clicks, installs
+    }
+    /// Lenient: rows cached by older versions lack the newer fields.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        date = try c.decode(String.self, forKey: .date)
+        app = try c.decode(AppKey.self, forKey: .app)
+        source = try c.decode(SourceKind.self, forKey: .source)
+        currency = try c.decode(String.self, forKey: .currency)
+        adRevenue = try c.decodeIfPresent(Double.self, forKey: .adRevenue) ?? 0
+        iapRevenue = try c.decodeIfPresent(Double.self, forKey: .iapRevenue) ?? 0
+        spend = try c.decodeIfPresent(Double.self, forKey: .spend) ?? 0
+        downloads = try c.decodeIfPresent(Int.self, forKey: .downloads) ?? 0
+        impressions = try c.decodeIfPresent(Int.self, forKey: .impressions) ?? 0
+        adImpressions = try c.decodeIfPresent(Int.self, forKey: .adImpressions) ?? 0
+        clicks = try c.decodeIfPresent(Int.self, forKey: .clicks) ?? 0
+        installs = try c.decodeIfPresent(Double.self, forKey: .installs) ?? 0
+    }
 }
 
 /// Display name hint discovered by a provider for an app key.
@@ -115,8 +141,14 @@ struct Totals {
     var spend: Double = 0
     var downloads: Int = 0
     var impressions: Int = 0
+    var adImpressions: Int = 0
+    var clicks: Int = 0
+    var installs: Double = 0
 
     var revenue: Double { adRevenue + iapRevenue }
+    var hasCampaignStats: Bool { adImpressions > 0 || clicks > 0 || installs > 0 }
+    var ctr: Double? { adImpressions > 0 ? Double(clicks) / Double(adImpressions) : nil }
+    var cpi: Double? { installs > 0 ? spend / installs : nil }
     var net: Double { revenue - spend }
     var roas: Double? { spend > 0 ? revenue / spend : nil }
 
@@ -125,7 +157,10 @@ struct Totals {
                iapRevenue: a.iapRevenue + b.iapRevenue,
                spend: a.spend + b.spend,
                downloads: a.downloads + b.downloads,
-               impressions: a.impressions + b.impressions)
+               impressions: a.impressions + b.impressions,
+               adImpressions: a.adImpressions + b.adImpressions,
+               clicks: a.clicks + b.clicks,
+               installs: a.installs + b.installs)
     }
 }
 
