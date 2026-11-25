@@ -28,9 +28,9 @@ struct GoogleClient: Equatable {
         let id = c.googleSignedInClientId.isEmpty ? c.googleClientId : c.googleSignedInClientId
         guard !id.isEmpty else { return nil }
         if let b = builtin, b.id == id { return b }
-        guard let secret = Secret.googleClientSecret.value, !secret.isEmpty else { return nil }
+        guard let secret = c.secret(.googleClientSecret), !secret.isEmpty else { return nil }
         return GoogleClient(id: id, secret: secret)
     }
 
-    static func isConnected(_ c: Config) -> Bool { current(c) != nil && Secret.googleRefreshToken.isSet }
+    static func isConnected(_ c: Config) -> Bool { current(c) != nil && c.hasSecret(.googleRefreshToken) }
 }

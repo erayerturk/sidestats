@@ -30,7 +30,7 @@ struct SettingsView: View {
 /// A secret text field backed by the Keychain. Shows a placeholder when a value is already stored.
 struct SecretField: View {
     var title: String
-    var secret: Secret
+    var secret: SecretKey
     var multiline = false
     var importTypes: [UTType] = []
     @State private var text = ""

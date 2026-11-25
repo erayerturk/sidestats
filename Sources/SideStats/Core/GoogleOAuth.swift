@@ -11,14 +11,15 @@ actor GoogleOAuth {
         "https://www.googleapis.com/auth/admob.readonly",
         "https://www.googleapis.com/auth/devstorage.read_only",
         "https://www.googleapis.com/auth/adwords",
+        "openid", "email",
     ]
 
-    private var accessToken: String?
-    private var expiresAt = Date.distantPast
+    /// Access tokens per account id.
+    private var tokens: [String: (token: String, expires: Date)] = [:]
 
     func accessToken(config: Config) async throws -> String {
-        if let t = accessToken, expiresAt.timeIntervalSinceNow > 60 { return t }
-        guard let refresh = Secret.googleRefreshToken.value, let client = GoogleClient.current(config) else {
+        if let t = tokens[config.accountId], t.expires.timeIntervalSinceNow > 60 { return t.token }
+        guard let refresh = config.secret(.googleRefreshToken), let client = GoogleClient.current(config) else {
             throw SideStatsError("Google is not connected. Open Settings → Google → Sign in.")
         }
         let json = try await HTTP.json(HTTP.request("https://oauth2.googleapis.com/token", method: "POST", form: [
@@ -26,18 +27,19 @@ actor GoogleOAuth {
             "refresh_token": refresh, "grant_type": "refresh_token",
         ])) as? [String: Any] ?? [:]
         guard let token = json.str("access_token") else { throw SideStatsError("Google token refresh failed") }
-        accessToken = token
-        expiresAt = Date().addingTimeInterval(json.num("expires_in"))
+        tokens[config.accountId] = (token, Date().addingTimeInterval(json.num("expires_in")))
         return token
     }
 
-    func signOut() {
-        accessToken = nil
-        Secret.googleRefreshToken.set(nil)
+    func signOut(accountId: String) {
+        tokens[accountId] = nil
+        Secret.googleRefreshToken.scoped(accountId).set(nil)
     }
 
     /// Runs the interactive browser sign-in and stores the refresh token.
-    func signIn(clientId: String, clientSecret: String, storeSecret: Bool = true) async throws {
+    /// Interactive sign-in for one account. Returns the Google account's e-mail (if granted).
+    @discardableResult
+    func signIn(accountId: String, clientId: String, clientSecret: String, storeSecret: Bool = true) async throws -> String? {
         let verifier = JWT.base64url(Data((0..<32).map { _ in UInt8.random(in: 0...255) }))
         let challenge = JWT.base64url(Data(SHA256.hash(data: Data(verifier.utf8))))
         let state = UUID().uuidString
@@ -55,7 +57,7 @@ actor GoogleOAuth {
             .init(name: "code_challenge", value: challenge),
             .init(name: "code_challenge_method", value: "S256"),
             .init(name: "access_type", value: "offline"),
-            .init(name: "prompt", value: "consent"),
+            .init(name: "prompt", value: "consent select_account"),
             .init(name: "state", value: state),
         ]
         let authURL = comps.url!
@@ -73,10 +75,21 @@ actor GoogleOAuth {
         guard let refresh = json.str("refresh_token") else {
             throw SideStatsError("Google did not return a refresh token")
         }
-        if storeSecret { Secret.googleClientSecret.set(clientSecret) }
-        Secret.googleRefreshToken.set(refresh)
-        accessToken = json.str("access_token")
-        expiresAt = Date().addingTimeInterval(json.num("expires_in"))
+        if storeSecret { Secret.googleClientSecret.scoped(accountId).set(clientSecret) }
+        Secret.googleRefreshToken.scoped(accountId).set(refresh)
+        if let t = json.str("access_token") { tokens[accountId] = (t, Date().addingTimeInterval(json.num("expires_in"))) }
+        return json.str("id_token").flatMap(Self.email(fromIdToken:))
+    }
+
+    /// The id_token comes straight from Google's token endpoint over TLS, so its payload is read without verifying the signature.
+    static func email(fromIdToken jwt: String) -> String? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        var b64 = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        guard let d = Data(base64Encoded: b64),
+              let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return nil }
+        return obj["email"] as? String
     }
 }
 

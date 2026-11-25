@@ -5,6 +5,7 @@ import Foundation
 /// Docs: https://developers.google.com/google-ads/api/docs/start
 struct GoogleAdsProvider: Provider {
     let kind = SourceKind.googleAds
+    let accountKind: AccountKind? = .google
     /// Google Ads API major versions live ~12 months; bump when Google sunsets this one.
     static let version = "v26"
     private var api: String { "https://googleads.googleapis.com/\(Self.version)" }
@@ -18,7 +19,7 @@ struct GoogleAdsProvider: Provider {
     func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
         let token = try await GoogleOAuth.shared.accessToken(config: c)
         var headers: [String: String] = [:]
-        if let dev = Secret.googleAdsDeveloperToken.value, !dev.isEmpty { headers["developer-token"] = dev }
+        if let dev = c.secret(.googleAdsDeveloperToken), !dev.isEmpty { headers["developer-token"] = dev }
         let login = Self.digits(c.googleAdsLoginCustomerId)
         if !login.isEmpty { headers["login-customer-id"] = login }
 
@@ -38,7 +39,7 @@ struct GoogleAdsProvider: Provider {
         var result = ProviderResult()
         var errors: [String] = []
         var okAccounts = 0
-        for cid in customers {
+        for cid in customers where ResourceClaims.claim("gads:\(cid)") {
             do {
                 var pageToken: String?
                 repeat {
@@ -85,6 +86,11 @@ struct GoogleAdsProvider: Provider {
             }
             if e.message.contains("HTTP 404") {
                 throw SideStatsError("Google Ads API \(Self.version) not found (sunset?). Update SideStats. \(e.message.prefix(200))")
+            }
+            if e.message.contains("CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION") {
+                throw SideStatsError(GoogleClient.builtin != nil
+                    ? "Google Ads access is pending Google's approval for SideStats (Explorer access). AdMob and Play work meanwhile."
+                    : "Your Cloud project only has Test access to the Google Ads API. Apply for Explorer access in Cloud Console → Google Ads API.")
             }
             if e.message.contains("REQUESTED_METRICS_FOR_MANAGER") {
                 throw SideStatsError("This is a manager (MCC) account. Enter the client account IDs and put the manager ID in “Manager account ID”.")

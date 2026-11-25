@@ -5,19 +5,20 @@ import Foundation
 /// Docs: https://developers.facebook.com/docs/marketing-api/insights
 struct MetaAdsProvider: Provider {
     let kind = SourceKind.metaAds
+    let accountKind: AccountKind? = .meta
     static let graph = "https://graph.facebook.com/v23.0"
 
-    func isConfigured(_ c: Config) -> Bool { !c.metaAdAccounts.isEmpty && Secret.metaAccessToken.isSet }
+    func isConfigured(_ c: Config) -> Bool { !c.metaAdAccounts.isEmpty && c.hasSecret(.metaAccessToken) }
 
     func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
-        let token = Secret.metaAccessToken.value ?? ""
+        let token = c.secret(.metaAccessToken) ?? ""
         let accounts = c.metaAdAccounts.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .map { $0.hasPrefix("act_") ? $0 : "act_\($0)" }
 
         var rows: [MetricRow] = []
-        for act in accounts {
+        for act in accounts where ResourceClaims.claim("meta:\(act)") {
             // campaign id -> app, from ad sets' promoted_object
             var campaignApp: [String: AppKey] = [:]
             for adset in try await paged("\(Self.graph)/\(act)/adsets?fields=campaign_id,promoted_object&limit=500", token) {

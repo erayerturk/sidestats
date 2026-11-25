@@ -54,11 +54,55 @@ final class MetricsStore: ObservableObject {
         }
     }
 
-    var configuredSources: [SourceKind] { providers.filter { $0.isConfigured(config) }.map(\.kind) }
+    var configuredSources: [SourceKind] { providers.filter { Self.isConfigured($0, config) }.map(\.kind) }
+
+    /// Account-based providers are configured when any enabled account is.
+    nonisolated static func isConfigured(_ p: Provider, _ c: Config) -> Bool {
+        guard let k = p.accountKind else { return p.isConfigured(c) }
+        return c.accounts(k).contains { $0.enabled && p.isConfigured($0.scoped(c)) }
+    }
+
+    /// Runs a provider once per configured account and merges the results; failing accounts become warnings.
+    nonisolated static func fetch(_ p: Provider, _ c: Config, start: String, end: String) async throws -> ProviderResult {
+        guard let k = p.accountKind else { return try await p.fetch(config: c, start: start, end: end) }
+        let accounts = c.accounts(k).filter { $0.enabled && p.isConfigured($0.scoped(c)) }
+        return try await ResourceClaims.$current.withValue(ResourceClaims()) {
+            try await fetchAccounts(p, accounts, c, start: start, end: end)
+        }
+    }
+
+    nonisolated private static func fetchAccounts(_ p: Provider, _ accounts: [SourceAccount], _ c: Config,
+                                                  start: String, end: String) async throws -> ProviderResult {
+        let tasks = accounts.map { a in
+            Task { () -> (String, Result<ProviderResult, Error>) in
+                do { return (a.displayName, .success(try await p.fetch(config: a.scoped(c), start: start, end: end))) }
+                catch { return (a.displayName, .failure(error)) }
+            }
+        }
+        var out = ProviderResult()
+        var errors: [String] = []
+        for t in tasks {
+            let (name, r) = await t.value
+            switch r {
+            case .success(let res):
+                out.rows += res.rows; out.names += res.names
+                errors += (res.warnings ?? []).map { accounts.count > 1 ? "\(name): \($0)" : $0 }
+            case .failure(let e):
+                errors.append(accounts.count > 1 ? "\(name): \(e.localizedDescription)" : e.localizedDescription)
+            }
+        }
+        if out.rows.isEmpty && errors.count == accounts.count && !errors.isEmpty {
+            throw SideStatsError(errors.joined(separator: "\n"))
+        }
+        out.warnings = errors.isEmpty ? nil : errors
+        return out
+    }
     var isLoading: Bool { status.values.contains { $0.loading } }
     var hasAnySource: Bool { !configuredSources.isEmpty }
 
     func refresh(only kinds: Set<SourceKind>? = nil) async {
+        // Sample data would mix with real numbers once a real source is connected.
+        if config.useDemoData && configuredSources.contains(where: { $0 != .demo }) { config.useDemoData = false }
         rates = await FXService.shared.rates(base: config.baseCurrency)
         let start = DayFormat.daysAgo(Self.fetchDays - 1), end = DayFormat.daysAgo(0)
         let cfg = config
@@ -68,12 +112,12 @@ final class MetricsStore: ObservableObject {
             Storage.remove("source-\(kind.rawValue).json")
         }
         await withTaskGroup(of: Void.self) { group in
-            for p in providers where p.isConfigured(cfg) && (kinds?.contains(p.kind) ?? true) {
+            for p in providers where Self.isConfigured(p, cfg) && (kinds?.contains(p.kind) ?? true) {
                 status[p.kind, default: .init()].loading = true
                 status[p.kind, default: .init()].lastAttempt = Date()
                 group.addTask { [p] in
                     do {
-                        let r = try await p.fetch(config: cfg, start: start, end: end)
+                        let r = try await Self.fetch(p, cfg, start: start, end: end)
                         await self.finished(p.kind, .success(r))
                     } catch {
                         await self.finished(p.kind, .failure(error))

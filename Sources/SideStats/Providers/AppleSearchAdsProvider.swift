@@ -4,10 +4,11 @@ import Foundation
 /// Docs: https://developer.apple.com/documentation/apple_search_ads/implementing_oauth_for_the_apple_search_ads_api
 struct AppleSearchAdsProvider: Provider {
     let kind = SourceKind.appleSearchAds
+    let accountKind: AccountKind? = .searchAds
     private let api = "https://api.searchads.apple.com/api/v5"
 
     func isConfigured(_ c: Config) -> Bool {
-        !c.asaClientId.isEmpty && !c.asaTeamId.isEmpty && !c.asaKeyId.isEmpty && Secret.asaPrivateKey.isSet
+        !c.asaClientId.isEmpty && !c.asaTeamId.isEmpty && !c.asaKeyId.isEmpty && c.hasSecret(.asaPrivateKey)
     }
 
     private func accessToken(_ c: Config) async throws -> String {
@@ -16,7 +17,7 @@ struct AppleSearchAdsProvider: Provider {
             header: ["alg": "ES256", "kid": c.asaKeyId],
             payload: ["sub": c.asaClientId, "iss": c.asaTeamId, "aud": "https://appleid.apple.com",
                       "iat": now, "exp": now + 3600],
-            pem: Secret.asaPrivateKey.value ?? "")
+            pem: c.secret(.asaPrivateKey) ?? "")
         let json = try await HTTP.json(HTTP.request("https://appleid.apple.com/auth/oauth2/token", method: "POST", form: [
             "grant_type": "client_credentials", "client_id": c.asaClientId,
             "client_secret": secret, "scope": "searchadsorg",
@@ -35,7 +36,7 @@ struct AppleSearchAdsProvider: Provider {
         }
 
         var rows: [MetricRow] = []
-        for org in orgIds {
+        for org in orgIds where ResourceClaims.claim("asa:\(org)") {
             var offset = 0
             while true {
                 let body: [String: Any] = [

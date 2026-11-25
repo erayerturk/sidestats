@@ -32,6 +32,13 @@ struct Config: Codable, Equatable {
     // Meta Ads
     var metaAdAccounts = ""        // comma separated, with or without act_ prefix
 
+    /// Connected accounts (several per source). The single-account fields above are filled from an
+    /// account by `SourceAccount.scoped` when a provider runs.
+    var accounts: [SourceAccount] = []
+    var accountsMigrated = false
+    /// Set on scoped copies only: which account's Keychain items to use.
+    var accountId = ""
+
     /// Custom revenue sources (any API / command / pushed JSON), see CustomRevenue.swift
     var revenueSources: [WidgetConfig] = []
 
@@ -44,7 +51,8 @@ struct Config: Codable, Equatable {
               let stored = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
               let defaults = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(Config())) as? [String: Any],
               let merged = try? JSONSerialization.data(withJSONObject: defaults.merging(stored) { _, new in new }),
-              let c = try? JSONDecoder().decode(Config.self, from: merged) else { return Config() }
+              var c = try? JSONDecoder().decode(Config.self, from: merged) else { return Config(accountsMigrated: true) }
+        if !c.accountsMigrated { c.migrateToAccounts(); c.save() }
         return c
     }
 
@@ -63,9 +71,15 @@ enum Secret: String {
 
 protocol Provider {
     var kind: SourceKind { get }
+    /// Sources with several accounts run once per account (with a scoped Config) and are merged.
+    var accountKind: AccountKind? { get }
     func isConfigured(_ c: Config) -> Bool
     /// Fetch daily metrics for the inclusive yyyy-MM-dd range.
     func fetch(config: Config, start: String, end: String) async throws -> ProviderResult
+}
+
+extension Provider {
+    var accountKind: AccountKind? { nil }
 }
 
 enum StoreURL {

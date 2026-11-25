@@ -4,6 +4,7 @@ import Foundation
 /// Docs: https://developers.google.com/admob/api/v1/reference/rest/v1/accounts.networkReport/generate
 struct AdMobProvider: Provider {
     let kind = SourceKind.admob
+    let accountKind: AccountKind? = .google
     private let api = "https://admob.googleapis.com/v1"
 
     func isConfigured(_ c: Config) -> Bool {
@@ -15,7 +16,7 @@ struct AdMobProvider: Provider {
         let accounts = try await HTTP.json(HTTP.request("\(api)/accounts", bearer: token)) as? [String: Any] ?? [:]
         var result = ProviderResult()
 
-        for account in accounts.arr("account").compactMap({ $0.str("name") }) {
+        for account in accounts.arr("account").compactMap({ $0.str("name") }) where ResourceClaims.claim("admob:\(account)") {
             // AdMob app id -> store key, so ad revenue merges with store revenue.
             var appMap: [String: AppKey] = [:]
             var pageToken: String?
@@ -80,6 +81,7 @@ struct AdMobProvider: Provider {
 /// Docs: https://support.google.com/googleplay/android-developer/answer/6135870
 struct GooglePlayProvider: Provider {
     let kind = SourceKind.googlePlay
+    let accountKind: AccountKind? = .google
 
     func isConfigured(_ c: Config) -> Bool {
         !c.playBucket.isEmpty && GoogleClient.isConnected(c)
@@ -93,6 +95,7 @@ struct GooglePlayProvider: Provider {
     func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
         let token = try await GoogleOAuth.shared.accessToken(config: c)
         let b = bucket(c)
+        guard ResourceClaims.claim("play:\(b)") else { return ProviderResult() }
         let months = Set(DayFormat.days(from: start, to: end).map { $0.prefix(7).replacingOccurrences(of: "-", with: "") })
         var result = ProviderResult()
         var agg: [String: MetricRow] = [:]

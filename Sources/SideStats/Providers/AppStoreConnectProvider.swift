@@ -4,12 +4,15 @@ import Foundation
 /// Docs: https://developer.apple.com/documentation/appstoreconnectapi/download_sales_and_trends_reports
 struct AppStoreConnectProvider: Provider {
     let kind = SourceKind.appStoreConnect
+    let accountKind: AccountKind? = .appStore
 
     /// Product type identifiers that count as a first-time download.
     static let downloadTypes: Set<String> = ["1", "1F", "1T", "F1", "1E", "1EP", "1EU"]
 
+    static func cacheFile(_ c: Config) -> String { c.accountId.isEmpty ? "asc-days.json" : "asc-days-\(c.accountId).json" }
+
     func isConfigured(_ c: Config) -> Bool {
-        !c.ascIssuerId.isEmpty && !c.ascKeyId.isEmpty && !c.ascVendorNumber.isEmpty && Secret.ascPrivateKey.isSet
+        !c.ascIssuerId.isEmpty && !c.ascKeyId.isEmpty && !c.ascVendorNumber.isEmpty && c.hasSecret(.ascPrivateKey)
     }
 
     private func token(_ c: Config) throws -> String {
@@ -17,10 +20,11 @@ struct AppStoreConnectProvider: Provider {
         return try JWT.es256(
             header: ["alg": "ES256", "kid": c.ascKeyId, "typ": "JWT"],
             payload: ["iss": c.ascIssuerId, "iat": now, "exp": now + 15 * 60, "aud": "appstoreconnect-v1"],
-            pem: Secret.ascPrivateKey.value ?? "")
+            pem: c.secret(.ascPrivateKey) ?? "")
     }
 
     func fetch(config c: Config, start: String, end: String) async throws -> ProviderResult {
+        guard ResourceClaims.claim("asc:\(c.ascVendorNumber)") else { return ProviderResult() }
         let jwt = try token(c)
 
         // SKU -> app (IAP rows reference their parent app by SKU), plus display names.
@@ -39,7 +43,7 @@ struct AppStoreConnectProvider: Provider {
         }
 
         // Past days never change, so they are cached on disk; the last 3 days are always refetched.
-        var cache = Storage.load([String: [MetricRow]].self, "asc-days.json") ?? [:]
+        var cache = Storage.load([String: [MetricRow]].self, Self.cacheFile(c)) ?? [:]
         let fresh = Set((0..<3).map { DayFormat.daysAgo($0) })
         let todo = DayFormat.days(from: start, to: end).filter { cache[$0] == nil || fresh.contains($0) }
 
@@ -61,7 +65,7 @@ struct AppStoreConnectProvider: Provider {
                 }
             }
         }
-        Storage.save(cache, "asc-days.json")
+        Storage.save(cache, Self.cacheFile(c))
         if let firstError, cache.isEmpty { throw firstError }
 
         let rows = DayFormat.days(from: start, to: end).flatMap { cache[$0] ?? [] }
