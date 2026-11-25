@@ -37,15 +37,15 @@ struct TasksModuleView: View {
             quickAdd
             if let err = todos.lastError {
                 HStack(alignment: .top, spacing: 6) {
-                    Label(err, systemImage: "exclamationmark.triangle").font(.caption2).foregroundStyle(.orange).lineLimit(3)
+                    Label(err, systemImage: "exclamationmark.triangle").sfont(.caption2).foregroundStyle(.orange).lineLimit(3)
                     Spacer(minLength: 0)
-                    Button { todos.lastError = nil } label: { Image(systemName: "xmark").font(.caption2) }
+                    Button { todos.lastError = nil } label: { Image(systemName: "xmark").sfont(.caption2) }
                         .buttonStyle(.borderless).foregroundStyle(.secondary)
                 }
             }
             if todos.settings.remindersEnabled && todos.remindersAccess != .full && todos.remindersAccess != .notDetermined {
                 Label("Reminders access is off. Enable it in Settings → Modules → Tasks.", systemImage: "lock")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .sfont(.caption2).foregroundStyle(.secondary)
             }
 
             if open.isEmpty {
@@ -53,7 +53,7 @@ struct TasksModuleView: View {
                     Image(systemName: "checkmark.seal").foregroundStyle(Color.revenue)
                     Text(completed.isEmpty ? "Nothing to do. Type above to add a task." : "All done for today. Nice work.")
                 }
-                .font(.callout).foregroundStyle(.secondary)
+                .sfont(.callout).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity).padding(.vertical, 10)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
@@ -78,14 +78,14 @@ struct TasksModuleView: View {
         return HStack(spacing: 6) {
             Image(systemName: "plus.circle.fill").foregroundStyle(quickAddFocused ? Color.accentColor : .secondary)
             TextField("Add a task, e.g. “call bank tomorrow 10am !!”", text: $draft)
-                .textFieldStyle(.plain).font(.callout)
+                .textFieldStyle(.plain).sfont(.callout)
                 .focused($quickAddFocused)
                 .onSubmit(submit)
                 .onExitCommand { draft = ""; quickAddFocused = false }
             if let p = preview {
                 if p.priority > 0 { PriorityMark(priority: p.priority) }
                 if p.due != nil, let label = TodoDue.label(TodoItem(title: "", due: p.due, allDay: p.allDay)) {
-                    Text(label).font(.caption2.weight(.medium)).lineLimit(1)
+                    Text(label).sfont(.caption2, weight: .medium).lineLimit(1)
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(Color.accentColor.opacity(0.15), in: Capsule())
                         .foregroundStyle(Color.accentColor)
@@ -144,7 +144,7 @@ struct TasksModuleView: View {
                 Text(title(b).uppercased())
                 Text("\(rows.count)").foregroundStyle(.tertiary)
             }
-            .font(.caption2.weight(.semibold))
+            .sfont(.caption2, weight: .semibold)
             .foregroundStyle(b == .overdue ? Color.spend : .secondary)
             .padding(.leading, 4).padding(.bottom, 2)
 
@@ -155,7 +155,7 @@ struct TasksModuleView: View {
                 Button("Show \(rows.count - Self.sectionLimit) more") {
                     withAnimation(.snappy(duration: 0.2)) { _ = expandedSections.insert(b) }
                 }
-                .buttonStyle(.link).font(.caption2).padding(.leading, 28)
+                .buttonStyle(.link).sfont(.caption2).padding(.leading, 28)
             }
         }
     }
@@ -190,11 +190,11 @@ struct TasksModuleView: View {
                 withAnimation(.snappy(duration: 0.2)) { showCompleted.toggle() }
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
+                    Image(systemName: "chevron.right").sfont(size: 8, weight: .bold)
                         .rotationEffect(.degrees(showCompleted ? 90 : 0))
                     Text("Completed today (\(items.count))")
                 }
-                .font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+                .sfont(.caption2, weight: .medium).foregroundStyle(.secondary)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain).padding(.leading, 4)
@@ -252,7 +252,7 @@ private struct TaskRow: View {
         HStack(alignment: .top, spacing: 8) {
             Button(action: onToggle) {
                 Image(systemName: checked ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 15))
+                    .sfont(size: 15)
                     .foregroundStyle(checked ? Color.revenue : item.priority == 3 ? Color.spend : Color.secondary)
                     .contentTransition(.symbolEffect(.replace))
                     .scaleEffect(checked ? 1.08 : 1)
@@ -264,7 +264,7 @@ private struct TaskRow: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     if item.priority > 0 && !checked { PriorityMark(priority: item.priority) }
                     Text(item.title.isEmpty ? "Untitled" : item.title)
-                        .font(.callout).lineLimit(2)
+                        .sfont(.callout).lineLimit(2)
                         .strikethrough(checked, color: .secondary)
                         .foregroundStyle(checked ? .secondary : .primary)
                 }
@@ -281,20 +281,20 @@ private struct TaskRow: View {
                             Image(systemName: "note.text").help(item.notes)
                         }
                     }
-                    .font(.caption2).foregroundStyle(.tertiary)
+                    .sfont(.caption2).foregroundStyle(.tertiary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let due = TodoDue.label(item, now: now) {
                 Text(due)
-                    .font(.caption2.weight(overdue ? .semibold : .regular)).monospacedDigit().lineLimit(1)
+                    .sfont(.caption2, weight: overdue ? .semibold : .regular).monospacedDigit().lineLimit(1)
                     .foregroundStyle(overdue ? Color.spend : .secondary)
                     .padding(.top, 2)
             }
             if hovered && !editing {
                 Button(action: onDelete) {
-                    Image(systemName: "trash").font(.caption)
+                    Image(systemName: "trash").sfont(.caption)
                 }
                 .buttonStyle(.borderless).foregroundStyle(.secondary).help("Delete")
                 .padding(.top, 1)
@@ -314,7 +314,7 @@ private struct PriorityMark: View {
     var priority: Int
     var body: some View {
         Text(String(repeating: "!", count: min(3, max(1, priority))))
-            .font(.caption.weight(.heavy))
+            .sfont(.caption, weight: .heavy)
             .foregroundStyle(priority >= 3 ? Color.spend : priority == 2 ? .orange : .blue)
     }
 }
@@ -355,14 +355,14 @@ private struct TaskEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             TextField("Title", text: $draft.title)
-                .textFieldStyle(.roundedBorder).font(.callout)
+                .textFieldStyle(.roundedBorder).sfont(.callout)
                 .focused($titleFocused)
                 .onSubmit(save)
             TextField("Notes", text: $draft.notes, axis: .vertical)
-                .textFieldStyle(.roundedBorder).font(.caption).lineLimit(1...4)
+                .textFieldStyle(.roundedBorder).sfont(.caption).lineLimit(1...4)
 
             HStack(spacing: 6) {
-                Toggle("Due", isOn: hasDue).toggleStyle(.checkbox).font(.caption)
+                Toggle("Due", isOn: hasDue).toggleStyle(.checkbox).sfont(.caption)
                 if draft.due != nil {
                     DatePicker("", selection: dueDate,
                                displayedComponents: draft.allDay ? [.date] : [.date, .hourAndMinute])
@@ -374,7 +374,7 @@ private struct TaskEditor: View {
                                 : Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: d)
                         }
                     }))
-                    .toggleStyle(.checkbox).font(.caption)
+                    .toggleStyle(.checkbox).sfont(.caption)
                 }
             }
             HStack(spacing: 4) {
@@ -383,7 +383,7 @@ private struct TaskEditor: View {
                 quick("Next week", days: 7)
                 if draft.due != nil {
                     Button("Clear") { draft.due = nil; draft.allDay = false }
-                        .buttonStyle(.link).font(.caption2)
+                        .buttonStyle(.link).sfont(.caption2)
                 }
             }
 
@@ -399,7 +399,7 @@ private struct TaskEditor: View {
                 Button(role: .destructive, action: onDelete) { Image(systemName: "trash") }
                     .buttonStyle(.borderless).foregroundStyle(Color.spend).help("Delete")
                 if original.isReminder {
-                    Label(original.list, systemImage: "list.bullet.circle").font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                    Label(original.list, systemImage: "list.bullet.circle").sfont(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                 }
                 Spacer()
                 Button("Cancel", action: onCancel).controlSize(.small)
@@ -425,7 +425,7 @@ private struct TaskEditor: View {
                 draft.due = cal.date(bySettingHour: hm.hour ?? 9, minute: hm.minute ?? 0, second: 0, of: day)
             }
         }
-        .buttonStyle(.bordered).controlSize(.mini).font(.caption2)
+        .buttonStyle(.bordered).controlSize(.mini).sfont(.caption2)
     }
 
     private func save() {
@@ -450,7 +450,7 @@ struct TasksSettingsView: View {
                 Text("Apple Reminders")
             } footer: {
                 Text("Incomplete reminders from the selected lists appear next to your local tasks. Completing, editing and deleting sync back to Reminders.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .sfont(.caption).foregroundStyle(.secondary)
             }
 
             if todos.remindersActive && !todos.reminderLists.isEmpty {
@@ -461,8 +461,8 @@ struct TasksSettingsView: View {
                             HStack(spacing: 6) {
                                 Circle().fill(Color.named(l.color, default: .secondary)).frame(width: 9, height: 9)
                                 Text(l.title)
-                                if !l.source.isEmpty { Text(l.source).font(.caption).foregroundStyle(.tertiary) }
-                                if !l.writable { Text("read-only").font(.caption2).foregroundStyle(.tertiary) }
+                                if !l.source.isEmpty { Text(l.source).sfont(.caption).foregroundStyle(.tertiary) }
+                                if !l.writable { Text("read-only").sfont(.caption2).foregroundStyle(.tertiary) }
                             }
                         }
                         .toggleStyle(.checkbox)
@@ -483,7 +483,7 @@ struct TasksSettingsView: View {
                     }
                 }
                 Text("Quick add understands dates like “tomorrow 10am” or “friday”, and !, !!, !!! for priority.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .sfont(.caption).foregroundStyle(.secondary)
             }
 
             Section("Display") {
@@ -496,7 +496,7 @@ struct TasksSettingsView: View {
             } header: {
                 Text("Notifications")
             } footer: {
-                Text("Reminders-backed tasks are notified by the Reminders app.").font(.caption).foregroundStyle(.secondary)
+                Text("Reminders-backed tasks are notified by the Reminders app.").sfont(.caption).foregroundStyle(.secondary)
             }
 
             Section("Local tasks") {
@@ -518,7 +518,7 @@ struct TasksSettingsView: View {
         switch todos.remindersAccess {
         case .full:
             Label("Access granted · \(todos.reminderLists.count) lists", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(Color.revenue).font(.callout)
+                .foregroundStyle(Color.revenue).sfont(.callout)
         case .notDetermined:
             HStack {
                 Label("Waiting for permission…", systemImage: "hourglass").foregroundStyle(.secondary)
@@ -527,14 +527,14 @@ struct TasksSettingsView: View {
             }
         case .unavailable:
             Label("Reminders needs the app bundle (run SideStats.app, not the bare binary).", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.orange).font(.callout)
+                .foregroundStyle(.orange).sfont(.callout)
         case .denied, .restricted, .writeOnly:
             VStack(alignment: .leading, spacing: 6) {
                 Label(todos.remindersAccess == .writeOnly
                       ? "SideStats only has add-only access. Allow Full Access to show reminders."
                       : "SideStats is not allowed to access Reminders.",
                       systemImage: "lock.fill")
-                    .foregroundStyle(.orange).font(.callout)
+                    .foregroundStyle(.orange).sfont(.callout)
                 HStack {
                     Button("Open Privacy Settings") {
                         open("x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")
@@ -548,16 +548,16 @@ struct TasksSettingsView: View {
     @ViewBuilder private var notificationStatus: some View {
         switch todos.notificationStatus {
         case .authorized:
-            Label("Notifications allowed", systemImage: "bell.badge").foregroundStyle(.secondary).font(.callout)
+            Label("Notifications allowed", systemImage: "bell.badge").foregroundStyle(.secondary).sfont(.callout)
         case .denied:
             HStack {
-                Label("Notifications are blocked", systemImage: "bell.slash").foregroundStyle(.orange).font(.callout)
+                Label("Notifications are blocked", systemImage: "bell.slash").foregroundStyle(.orange).sfont(.callout)
                 Spacer()
                 Button("Open Settings") { open("x-apple.systempreferences:com.apple.Notifications-Settings.extension") }
             }
         case .notDetermined:
             HStack {
-                Text("Permission is requested the first time a task has a due date.").font(.caption).foregroundStyle(.secondary)
+                Text("Permission is requested the first time a task has a due date.").sfont(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Allow now") { todos.requestNotificationPermission() }
             }

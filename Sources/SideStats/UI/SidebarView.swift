@@ -33,6 +33,7 @@ struct SidebarView: View {
     @EnvironmentObject var todos: TodoStore
     var openSettings: (SettingsTab) -> Void
     @State private var expanded: String?
+    @AppStorage(UIScale.key) private var uiScale = 1.0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,10 +43,10 @@ struct SidebarView: View {
                 VStack(spacing: 16) {
                     ForEach(widgets.visibleModules, id: \.self) { id in module(id) }
                     if widgets.visibleModules.isEmpty {
-                        Text("All modules are hidden.").font(.callout).foregroundStyle(.secondary).padding(.vertical, 30)
+                        Text("All modules are hidden.").sfont(.callout).foregroundStyle(.secondary).padding(.vertical, 30)
                     }
                     Button { openSettings(.widgets) } label: {
-                        Label("Add module", systemImage: "plus.circle").font(.caption)
+                        Label("Add module", systemImage: "plus.circle").sfont(.caption)
                     }
                     .buttonStyle(.borderless).foregroundStyle(.secondary)
                 }
@@ -57,6 +58,7 @@ struct SidebarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.uiScale, CGFloat(uiScale))
     }
 
     @ViewBuilder private func module(_ id: String) -> some View {
@@ -78,7 +80,7 @@ struct SidebarView: View {
                         }
                         if store.groups.isEmpty && !store.isLoading {
                             Text("No data for this period yet.")
-                                .font(.callout).foregroundStyle(.secondary).padding(.vertical, 20)
+                                .sfont(.callout).foregroundStyle(.secondary).padding(.vertical, 20)
                         }
                     }
                 }
@@ -99,7 +101,7 @@ struct SidebarView: View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: "chart.bar.xaxis").foregroundStyle(Color.revenue)
-                Text("SideStats").font(.headline)
+                Text("SideStats").sfont(.headline)
                 Spacer()
                 Button { widgets.refreshAll(); Task { await store.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
@@ -112,6 +114,13 @@ struct SidebarView: View {
                     Image(systemName: edge.isPinned ? "pin.fill" : "pin")
                 }
                 .help(edge.isPinned ? "Unpin (auto-hide)" : "Pin open")
+                Menu {
+                    Button("Bigger Text  ⌘+") { UIScale.bigger() }.disabled(uiScale >= UIScale.range.upperBound)
+                    Button("Smaller Text  ⌘−") { UIScale.smaller() }.disabled(uiScale <= UIScale.range.lowerBound)
+                    Divider()
+                    Button("Actual Size (\(Int((uiScale * 100).rounded()))%)  ⌘0") { UIScale.reset() }
+                } label: { Image(systemName: "textformat.size") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Text size")
                 Button { openSettings(.general) } label: { Image(systemName: "gearshape") }.help("Settings")
             }
             .buttonStyle(.borderless)
@@ -131,7 +140,7 @@ struct SidebarView: View {
                 ForEach(SortOption.allCases) { Text($0.rawValue).tag($0) }
             }
         } label: {
-            Label(store.sort.rawValue, systemImage: "arrow.up.arrow.down").font(.caption2)
+            Label(store.sort.rawValue, systemImage: "arrow.up.arrow.down").sfont(.caption2)
         }
         .menuStyle(.borderlessButton).fixedSize()
     }
@@ -166,7 +175,7 @@ struct SidebarView: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             Text("Connect App Store Connect, Google Play, AdMob, Apple Search Ads or Meta Ads. Keys stay in your Keychain.")
-                .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .sfont(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             HStack {
                 Button("Connect accounts") { openSettings(.appStore) }.buttonStyle(.borderedProminent).controlSize(.small)
                 Button("Try demo data") {
@@ -185,7 +194,7 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: 4) {
             if !store.missingCurrencies.isEmpty {
                 Label("No exchange rate for \(store.missingCurrencies.joined(separator: ", ")) — excluded",
-                      systemImage: "exclamationmark.triangle").font(.caption2).foregroundStyle(.orange)
+                      systemImage: "exclamationmark.triangle").sfont(.caption2).foregroundStyle(.orange)
             }
             FlowStatus()
         }
@@ -203,7 +212,7 @@ struct FlowStatus: View {
                 let s = store.status[kind] ?? .init()
                 HStack(spacing: 4) {
                     Circle().fill(s.loading ? .blue : s.error != nil ? .red : .green).frame(width: 6, height: 6)
-                    Text(short(kind)).font(.caption2).foregroundStyle(.secondary)
+                    Text(short(kind)).sfont(.caption2).foregroundStyle(.secondary)
                 }
                 .help(s.error ?? s.lastSuccess.map { "\(kind.title) — updated \($0.formatted(.relative(presentation: .named)))" } ?? kind.title)
             }
@@ -224,6 +233,7 @@ struct FlowStatus: View {
 }
 
 struct SummaryCard: View {
+    @Environment(\.uiScale) private var uiScale
     var totals: Totals
     var series: [DailyPoint]
     var currency: String
@@ -232,18 +242,18 @@ struct SummaryCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Net profit").font(.caption).foregroundStyle(.secondary)
+                    Text("Net profit").sfont(.caption).foregroundStyle(.secondary)
                     Text(Fmt.money(totals.net, currency, compact: true))
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .sfont(size: 28, weight: .bold, design: .rounded)
                         .foregroundStyle(totals.net >= 0 ? Color.primary : Color.spend)
                         .contentTransition(.numericText())
                 }
                 Spacer()
                 if let roas = totals.roas {
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("ROAS").font(.caption).foregroundStyle(.secondary)
+                        Text("ROAS").sfont(.caption).foregroundStyle(.secondary)
                         Text(roas.formatted(.number.precision(.fractionLength(2))) + "×")
-                            .font(.system(.title3, design: .rounded).weight(.semibold))
+                            .sfont(.title3, weight: .semibold, design: .rounded)
                     }
                 }
             }
@@ -258,11 +268,11 @@ struct SummaryCard: View {
                 AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { v in
                     AxisGridLine().foregroundStyle(.quaternary)
                     AxisValueLabel {
-                        if let d = v.as(Double.self) { Text(Fmt.axis(abs(d), currency)).font(.caption2) }
+                        if let d = v.as(Double.self) { Text(Fmt.axis(abs(d), currency)).sfont(.caption2) }
                     }
                 }
             }
-            .frame(height: 90)
+            .frame(height: 90 * uiScale)
 
             HStack(spacing: 0) {
                 Stat(title: "Revenue", value: Fmt.money(totals.revenue, currency, compact: true), color: .revenue)
@@ -274,7 +284,7 @@ struct SummaryCard: View {
                 Text("Store \(Fmt.money(totals.iapRevenue, currency, compact: true))")
                 if totals.impressions > 0 { Text("\(Fmt.count(totals.impressions)) impr.") }
             }
-            .font(.caption2).foregroundStyle(.secondary)
+            .sfont(.caption2).foregroundStyle(.secondary)
         }
         .padding(12)
         .background(.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
@@ -289,9 +299,9 @@ struct Stat: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Circle().fill(color).frame(width: 6, height: 6)
-                Text(title).font(.caption2).foregroundStyle(.secondary)
+                Text(title).sfont(.caption2).foregroundStyle(.secondary)
             }
-            Text(value).font(.system(.callout, design: .rounded).weight(.semibold)).monospacedDigit()
+            Text(value).sfont(.callout, weight: .semibold, design: .rounded).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -307,10 +317,10 @@ struct AppRow: View {
             HStack(spacing: 10) {
                 AppIcon(name: group.name, iosId: group.iosStoreId)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(group.name).font(.callout.weight(.medium)).lineLimit(1)
+                    Text(group.name).sfont(.callout, weight: .medium).lineLimit(1)
                     HStack(spacing: 4) {
                         ForEach(group.platforms, id: \.self) { p in
-                            Text(p.short).font(.system(size: 8, weight: .semibold)).fixedSize()
+                            Text(p.short).sfont(size: 8, weight: .semibold).fixedSize()
                                 .padding(.horizontal, 3).padding(.vertical, 1)
                                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 3))
                                 .foregroundStyle(.secondary)
@@ -322,13 +332,13 @@ struct AppRow: View {
                                 .fixedSize()
                         }
                     }
-                    .font(.caption2).monospacedDigit()
+                    .sfont(.caption2).monospacedDigit()
                 }
                 Spacer(minLength: 4)
                 Sparkline(points: group.series)
                     .frame(width: 44, height: 22)
                 Text(Fmt.money(group.totals.net, currency, compact: true))
-                    .font(.system(.callout, design: .rounded).weight(.semibold)).monospacedDigit()
+                    .sfont(.callout, weight: .semibold, design: .rounded).monospacedDigit()
                     .foregroundStyle(group.totals.net >= 0 ? Color.primary : Color.spend)
                     .frame(minWidth: 62, alignment: .trailing)
             }
@@ -364,8 +374,8 @@ struct AppRow: View {
 
     private func detail(_ t: String, _ v: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(t).font(.caption2).foregroundStyle(.secondary)
-            Text(v).font(.caption.weight(.medium)).monospacedDigit()
+            Text(t).sfont(.caption2).foregroundStyle(.secondary)
+            Text(v).sfont(.caption, weight: .medium).monospacedDigit()
         }
     }
 }
@@ -395,7 +405,7 @@ struct AppIcon: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7).fill(monogramColor.gradient)
-            Text(String(name.prefix(1)).uppercased()).font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+            Text(String(name.prefix(1)).uppercased()).sfont(size: 13, weight: .bold).foregroundStyle(.white)
             if let url {
                 AsyncImage(url: url) { img in img.resizable() } placeholder: { Color.clear }
                     .clipShape(RoundedRectangle(cornerRadius: 7))

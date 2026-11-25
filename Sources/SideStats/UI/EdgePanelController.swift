@@ -10,7 +10,10 @@ final class SidebarPanel: NSPanel {
 /// hides it when the pointer leaves (unless pinned).
 @MainActor
 final class EdgePanelController: ObservableObject {
-    static let width: CGFloat = 360
+    static let baseWidth: CGFloat = 360
+    /// Panel width grows with the text size so layouts keep their proportions.
+    static var width: CGFloat { (baseWidth * CGFloat(UIScale.current)).rounded() }
+    private var lastScale = UIScale.current
     private let margin: CGFloat = 8
 
     @Published private(set) var isVisible = false
@@ -75,6 +78,26 @@ final class EdgePanelController: ObservableObject {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { if self?.isVisible == true { self?.show(animated: false) } }
+        }
+        // ⌘+ / ⌘− / ⌘0 change the text size while the panel is focused.
+        if let m = NSEvent.addLocalMonitorForEvents(matching: [.keyDown], handler: { e in
+            guard e.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.shift, .numericPad]) == .command,
+                  let c = e.charactersIgnoringModifiers else { return e }
+            switch c {
+            case "+", "=": UIScale.bigger(); return nil
+            case "-", "_": UIScale.smaller(); return nil
+            case "0": UIScale.reset(); return nil
+            default: return e
+            }
+        }) {
+            monitors.append(m)
+        }
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.lastScale != UIScale.current else { return }
+                self.lastScale = UIScale.current
+                if self.isVisible { self.show(animated: false) }
+            }
         }
         if isPinned { show(animated: false) }
     }

@@ -98,10 +98,10 @@ struct StatView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(spec.label).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            Text(spec.label).sfont(.caption2).foregroundStyle(.secondary).lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(valueText)
-                    .font(.system(large ? .title2 : .callout, design: .rounded).weight(.semibold))
+                    .sfont(large ? .title2 : .callout, weight: .semibold, design: .rounded)
                     .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
                     .foregroundStyle(Color.named(spec.color, default: .primary))
                     .contentTransition(.numericText())
@@ -109,7 +109,7 @@ struct StatView: View {
                 if let delta = spec.delta {
                     let good = (delta >= 0) == spec.positiveIsGood
                     Text((delta >= 0 ? "▲ " : "▼ ") + abs(delta).formatted(.percent.precision(.fractionLength(0...1))))
-                        .font(.caption2.weight(.medium)).foregroundStyle(good ? Color.revenue : Color.spend)
+                        .sfont(.caption2, weight: .medium).foregroundStyle(good ? Color.revenue : Color.spend)
                 }
             }
             if !spec.sparkline.isEmpty {
@@ -120,7 +120,7 @@ struct StatView: View {
                 }
                 .chartXAxis(.hidden).chartYAxis(.hidden).frame(height: 20)
             }
-            if let caption = spec.caption { Text(caption).font(.caption2).foregroundStyle(.tertiary).lineLimit(2) }
+            if let caption = spec.caption { Text(caption).sfont(.caption2).foregroundStyle(.tertiary).lineLimit(2) }
         }
     }
 
@@ -133,15 +133,16 @@ struct StatView: View {
 }
 
 struct ChartItemView: View {
+    @Environment(\.uiScale) private var uiScale
     var spec: ChartSpec
     private static let palette: [Color] = [.revenue, .blue, .orange, .purple, .pink, .teal, .spend, .yellow]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let label = spec.label, !label.isEmpty { Text(label).font(.caption.weight(.medium)) }
+            if let label = spec.label, !label.isEmpty { Text(label).sfont(.caption, weight: .medium) }
             chart
                 .chartLegend(spec.series.count > 1 || isPie ? .visible : .hidden)
-                .frame(height: spec.height)
+                .frame(height: spec.height * uiScale)
         }
     }
 
@@ -171,13 +172,13 @@ struct ChartItemView: View {
                     AxisGridLine().foregroundStyle(.quaternary)
                     AxisValueLabel {
                         if let d = v.as(Double.self) {
-                            Text(ValueFormat.string(d, format: spec.format, currency: spec.currency)).font(.caption2)
+                            Text(ValueFormat.string(d, format: spec.format, currency: spec.currency)).sfont(.caption2)
                         }
                     }
                 }
             }
             .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisValueLabel().font(.caption2) }
+                AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisValueLabel().font(.system(size: 10 * uiScale)) }
             }
         }
     }
@@ -205,17 +206,17 @@ struct ListItemView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let label = spec.label, !label.isEmpty { Text(label).font(.caption.weight(.medium)) }
+            if let label = spec.label, !label.isEmpty { Text(label).sfont(.caption, weight: .medium) }
             ForEach(showAll ? spec.rows : Array(spec.rows.prefix(spec.limit))) { row in
                 HStack(spacing: 8) {
                     icon(row.icon)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(row.title).font(.callout).lineLimit(1)
-                        if let s = row.subtitle { Text(s).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+                        Text(row.title).sfont(.callout).lineLimit(1)
+                        if let s = row.subtitle { Text(s).sfont(.caption2).foregroundStyle(.secondary).lineLimit(1) }
                     }
                     Spacer(minLength: 4)
                     if let v = row.value {
-                        Text(v).font(.callout.weight(.semibold)).monospacedDigit()
+                        Text(v).sfont(.callout, weight: .semibold).monospacedDigit()
                             .foregroundStyle(Color.named(row.valueColor, default: .primary))
                     }
                 }
@@ -224,7 +225,7 @@ struct ListItemView: View {
             }
             if spec.rows.count > spec.limit {
                 Button(showAll ? "Show less" : "Show all \(spec.rows.count)") { showAll.toggle() }
-                    .buttonStyle(.link).font(.caption)
+                    .buttonStyle(.link).sfont(.caption)
             }
         }
     }
@@ -244,14 +245,14 @@ struct TextItemView: View {
     var body: some View {
         Group {
             switch spec.style {
-            case "title": Text(spec.text).font(.headline)
-            case "caption": Text(spec.text).font(.caption).foregroundStyle(.secondary)
+            case "title": Text(spec.text).sfont(.headline)
+            case "caption": Text(spec.text).sfont(.caption).foregroundStyle(.secondary)
             case "mono":
                 ScrollView(.horizontal, showsIndicators: false) {
-                    Text(spec.text).font(.system(size: 10, design: .monospaced)).fixedSize()
+                    Text(spec.text).sfont(size: 10, design: .monospaced).fixedSize()
                 }
                 .frame(maxHeight: 220)
-            default: Text((try? AttributedString(markdown: spec.text)) ?? AttributedString(spec.text)).font(.callout)
+            default: Text((try? AttributedString(markdown: spec.text)) ?? AttributedString(spec.text)).sfont(.callout)
             }
         }
         .foregroundStyle(Color.named(spec.color, default: .primary))
@@ -265,10 +266,10 @@ struct ProgressItemView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(spec.label).font(.caption)
+                Text(spec.label).sfont(.caption)
                 Spacer()
                 Text(spec.caption ?? spec.value.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    .sfont(.caption).foregroundStyle(.secondary).monospacedDigit()
             }
             GeometryReader { g in
                 ZStack(alignment: .leading) {
@@ -289,9 +290,9 @@ struct StatusItemView: View {
         HStack(spacing: 8) {
             Circle().fill(color).frame(width: 8, height: 8)
                 .shadow(color: color.opacity(0.6), radius: 3)
-            Text(spec.label).font(.callout)
+            Text(spec.label).sfont(.callout)
             Spacer()
-            if let d = spec.detail { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+            if let d = spec.detail { Text(d).sfont(.caption).foregroundStyle(.secondary).lineLimit(1) }
         }
     }
     private var color: Color {
@@ -320,13 +321,13 @@ struct ModuleCard<Content: View, Actions: View>: View {
         let isCollapsed = widgets.collapsed.contains(id)
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right").sfont(size: 9, weight: .bold).foregroundStyle(.tertiary)
                     .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-                Image(systemName: icon).font(.caption).foregroundStyle(.secondary)
-                Text(title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Image(systemName: icon).sfont(.caption).foregroundStyle(.secondary)
+                Text(title).sfont(.subheadline, weight: .semibold).lineLimit(1)
                 if live { LiveDot() }
                 Spacer()
-                if let status { Text(status).font(.caption2).foregroundStyle(.tertiary).monospacedDigit() }
+                if let status { Text(status).sfont(.caption2).foregroundStyle(.tertiary).monospacedDigit() }
                 actions()
             }
             .contentShape(Rectangle())
@@ -337,7 +338,7 @@ struct ModuleCard<Content: View, Actions: View>: View {
             }
             if !isCollapsed {
                 if let error {
-                    Label(error, systemImage: "exclamationmark.triangle").font(.caption2).foregroundStyle(.orange)
+                    Label(error, systemImage: "exclamationmark.triangle").sfont(.caption2).foregroundStyle(.orange)
                         .lineLimit(3).textSelection(.enabled)
                 }
                 content()
@@ -361,7 +362,7 @@ struct AgoText: View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let s = max(0, Int(ctx.date.timeIntervalSince(date)))
             Text(s < 60 ? "\(s)s" : s < 3600 ? "\(s / 60)m" : "\(s / 3600)h")
-                .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                .sfont(.caption2).foregroundStyle(.tertiary).monospacedDigit()
         }
     }
 }
@@ -378,7 +379,7 @@ struct WidgetModuleView: View {
                    live: config.refreshSeconds <= 60, error: state.error) {
             if let d = state.updated { AgoText(date: d) }
             Button { widgets.refresh(config.id) } label: {
-                Image(systemName: "arrow.clockwise").font(.caption2)
+                Image(systemName: "arrow.clockwise").sfont(.caption2)
             }
             .buttonStyle(.borderless).help("Refresh now")
         } content: {

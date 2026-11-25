@@ -121,6 +121,7 @@ private let docsBase = Links.repo + "#"
 
 struct GeneralSettings: View {
     @EnvironmentObject var store: MetricsStore
+    @AppStorage(UIScale.key) private var uiScale = 1.0
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     static let currencies = ["USD", "EUR", "GBP", "TRY", "JPY", "CAD", "AUD", "CHF", "SEK", "NOK", "PLN", "INR", "BRL", "KRW", "CNY", "MXN"]
 
@@ -146,8 +147,15 @@ struct GeneralSettings: View {
                         Text("\(store.config.edgeDelayMs) ms").monospacedDigit().frame(width: 56, alignment: .trailing)
                     }
                 }
+                LabeledContent("Text size") {
+                    HStack {
+                        Slider(value: Binding(get: { uiScale }, set: { UIScale.set($0) }),
+                               in: UIScale.range, step: UIScale.step)
+                        Text("\(Int((uiScale * 100).rounded()))%").monospacedDigit().frame(width: 56, alignment: .trailing)
+                    }
+                }
                 LabeledContent("Toggle shortcut") { Text("⌃⌥⌘S").monospaced() }
-                Text("Move the pointer to the right edge of your right-most screen to reveal the sidebar.")
+                Text("Move the pointer to the right edge of your right-most screen to reveal the sidebar. ⌘+ / ⌘− / ⌘0 change the text size while the sidebar is focused.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Data") {
