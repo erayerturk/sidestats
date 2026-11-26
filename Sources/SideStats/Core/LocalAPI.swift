@@ -310,10 +310,11 @@ final class LocalAPIServer: ObservableObject {
         widgets.layout.enumerated().map { i, id in
             if let title = WidgetStore.builtinTitle(id) {
                 var m: [String: Any] = ["id": id, "title": title, "position": i,
-                                        "kind": id == WidgetStore.tasksModule ? "tasks" : "revenue",
+                                        "kind": id == WidgetStore.tasksModule ? "tasks" : id == WidgetStore.campaignsModule ? "campaigns" : "revenue",
                                         "icon": WidgetStore.builtinIcon(id), "enabled": true,
                                         "hidden": widgets.hidden.contains(id), "collapsed": widgets.collapsed.contains(id)]
                 if id == WidgetStore.tasksModule { m["openTasks"] = todos.items.filter { !$0.done }.count }
+                else if id == WidgetStore.campaignsModule { m["campaigns"] = store.campaigns.count }
                 else { m["apps"] = store.groups.count; m["sources"] = store.configuredSources.map(\.rawValue) }
                 return m
             }

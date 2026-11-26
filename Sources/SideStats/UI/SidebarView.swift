@@ -83,10 +83,16 @@ struct SidebarView: View {
                                 .sfont(.callout).foregroundStyle(.secondary).padding(.vertical, 20)
                         }
                     }
-                    if !store.campaigns.isEmpty {
-                        CampaignsSection(campaigns: store.campaigns, currency: store.config.baseCurrency)
-                    }
+
                 }
+            }
+        } else if id == WidgetStore.campaignsModule {
+            let active = store.campaigns.filter { $0.state == .active }.count
+            ModuleCard(id: id, title: "Ad Campaigns", icon: "megaphone",
+                       status: store.campaigns.isEmpty ? nil : "\(active) active · \(Fmt.money(store.campaigns.reduce(0) { $0 + $1.totals.spend }, store.config.baseCurrency, compact: true))") {
+                EmptyView()
+            } content: {
+                CampaignsModuleView()
             }
         } else if id == WidgetStore.tasksModule {
             ModuleCard(id: id, title: "Tasks", icon: "checklist",
@@ -468,157 +474,3 @@ actor IconCache {
     }
 }
 
-/// Every tracked ad campaign, including ones that haven't started or have no delivery yet.
-struct CampaignsSection: View {
-    var campaigns: [CampaignSummary]
-    var currency: String
-    @AppStorage("campaignsExpanded") private var open = true
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.snappy(duration: 0.2)) { open.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.right").rotationEffect(.degrees(open ? 90 : 0)).sfont(.caption2)
-                    Text("Ad campaigns").sfont(.caption, weight: .semibold)
-                    Text("\(campaigns.count)").sfont(.caption2).foregroundStyle(.secondary)
-                    Spacer()
-                    let live = campaigns.filter { $0.state == .active }.count
-                    if live > 0 { Text("\(live) active").sfont(.caption2).foregroundStyle(.secondary) }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            if open {
-                CampaignChart(campaigns: campaigns, currency: currency)
-                ForEach(campaigns) { c in CampaignRow(campaign: c, currency: currency) }
-            }
-        }
-        .padding(.top, 6)
-    }
-}
-
-struct CampaignRow: View {
-    var campaign: CampaignSummary
-    var currency: String
-
-    private var color: Color {
-        switch campaign.state {
-        case .active: return .green
-        case .scheduled: return .orange
-        case .paused, .ended: return .gray
-        case .unknown: return .secondary
-        }
-    }
-
-    var body: some View {
-        let t = campaign.totals
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Circle().fill(color).frame(width: 7, height: 7)
-                Text(campaign.name).sfont(.caption, weight: .medium).lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 4)
-                Text(t.spend > 0 ? Fmt.money(t.spend, currency, compact: true) : "—")
-                    .sfont(.caption, weight: .semibold, design: .rounded).monospacedDigit()
-                    .foregroundStyle(t.spend > 0 ? Color.spend : Color.secondary)
-            }
-            HStack(spacing: 8) {
-                Text([campaign.state.label, campaign.appName, campaign.source.title].compactMap { $0 }.filter { !$0.isEmpty }
-                    .joined(separator: " · ")).lineLimit(1)
-                Spacer(minLength: 4)
-                if t.adImpressions > 0 || t.clicks > 0 || t.installs > 0 {
-                    Text("\(Fmt.count(t.adImpressions)) views · \(Fmt.count(t.clicks)) clicks · \(Fmt.count(Int(t.installs.rounded()))) inst.")
-                        .monospacedDigit().lineLimit(1)
-                } else {
-                    Text("No delivery yet")
-                }
-            }
-            .sfont(.caption2).foregroundStyle(.secondary)
-            .padding(.leading, 13)
-        }
-        .padding(.horizontal, 8).padding(.vertical, 6)
-        .background(.background.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-        .help(campaign.name)
-    }
-}
-
-enum CampaignMetric: String, CaseIterable, Identifiable {
-    case spend = "Spend", views = "Views", clicks = "Clicks", installs = "Installs"
-    var id: String { rawValue }
-    func value(_ t: Totals) -> Double {
-        switch self {
-        case .spend: return t.spend
-        case .views: return Double(t.adImpressions)
-        case .clicks: return Double(t.clicks)
-        case .installs: return t.installs
-        }
-    }
-}
-
-/// Daily stacked bars per campaign for the chosen metric.
-struct CampaignChart: View {
-    var campaigns: [CampaignSummary]
-    var currency: String
-    @AppStorage("campaignChartMetric") private var metricRaw = CampaignMetric.spend.rawValue
-    private var metric: CampaignMetric { CampaignMetric(rawValue: metricRaw) ?? .spend }
-
-    private struct Point: Identifiable {
-        var id: String { campaign + "\(date.timeIntervalSince1970)" }
-        var date: Date; var campaign: String; var value: Double
-    }
-
-    private var points: [Point] {
-        let shown = campaigns.filter { metric.value($0.totals) > 0 }
-        // Start at the first day with data (but show at least a week) so new campaigns aren't squeezed to the edge.
-        let allDays = shown.first?.days.map(\.date) ?? []
-        let firstData = shown.flatMap { c in c.days.filter { metric.value($0.totals) > 0 }.map(\.date) }.min()
-        var from = allDays.first ?? Date()
-        if let firstData, let last = allDays.last {
-            let weekBefore = Calendar.utc.date(byAdding: .day, value: -6, to: last) ?? last
-            from = max(from, min(Calendar.utc.date(byAdding: .day, value: -1, to: firstData) ?? firstData, weekBefore))
-        }
-        return shown.flatMap { c in
-            c.days.filter { $0.date >= from }.map { Point(date: $0.date, campaign: c.name, value: metric.value($0.totals)) }
-        }
-    }
-
-    private func format(_ v: Double) -> String {
-        metric == .spend ? Fmt.money(v, currency, compact: true) : Fmt.count(Int(v.rounded()))
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Picker("", selection: $metricRaw) {
-                ForEach(CampaignMetric.allCases) { Text($0.rawValue).tag($0.rawValue) }
-            }
-            .pickerStyle(.segmented).labelsHidden().controlSize(.small)
-            let pts = points
-            if pts.isEmpty {
-                Text("No \(metric.rawValue.lowercased()) in this period yet.")
-                    .sfont(.caption2).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 60)
-            } else {
-                Chart(pts) { p in
-                    BarMark(x: .value("Day", p.date, unit: .day), y: .value(metric.rawValue, p.value))
-                        .foregroundStyle(by: .value("Campaign", p.campaign))
-                }
-                .chartLegend(position: .bottom, alignment: .leading, spacing: 4)
-                .chartYAxis {
-                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { v in
-                        AxisGridLine().foregroundStyle(.quaternary)
-                        AxisValueLabel { if let d = v.as(Double.self) { Text(format(d)).sfont(size: 8) } }
-                    }
-                }
-                .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                        AxisValueLabel(format: .dateTime.day().month(.abbreviated)).font(.system(size: 8))
-                    }
-                }
-                .frame(height: 140)
-            }
-        }
-        .padding(8)
-        .background(.background.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-    }
-}

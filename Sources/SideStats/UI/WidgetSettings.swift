@@ -44,6 +44,17 @@ struct WidgetSettings: View {
             Group {
                 if let id = selection, id == WidgetStore.revenueModule {
                     revenueInfo
+                } else if let id = selection, id == WidgetStore.campaignsModule {
+                    Form {
+                        Section("Ad Campaigns") {
+                            Text("Every tracked campaign from Google Ads, Apple Search Ads and Meta Ads, with spend, views, clicks, installs and charts. Choose which campaigns count in each source's settings (Tracked campaigns → Choose…).")
+                                .foregroundStyle(.secondary)
+                            Toggle("Show in sidebar", isOn: Binding(
+                                get: { !widgets.hidden.contains(WidgetStore.campaignsModule) },
+                                set: { if $0 { widgets.hidden.remove(WidgetStore.campaignsModule) } else { widgets.hidden.insert(WidgetStore.campaignsModule) } }))
+                        }
+                    }
+                    .formStyle(.grouped)
                 } else if let id = selection, id == WidgetStore.tasksModule {
                     TasksSettingsView()
                 } else if let id = selection, let w = widgets.widget(id) {

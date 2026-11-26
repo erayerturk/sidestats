@@ -558,16 +558,18 @@ struct WidgetState {
 final class WidgetStore: ObservableObject {
     static let revenueModule = "builtin.revenue"
     static let tasksModule = "builtin.tasks"
-    static let builtinModules = [revenueModule, tasksModule]
+    static let campaignsModule = "builtin.campaigns"
+    static let builtinModules = [revenueModule, campaignsModule, tasksModule]
     static func builtinTitle(_ id: String) -> String? {
         switch id {
         case revenueModule: return "Apps & Revenue"
         case tasksModule: return "Tasks"
+        case campaignsModule: return "Ad Campaigns"
         default: return nil
         }
     }
     static func builtinIcon(_ id: String) -> String {
-        id == tasksModule ? "checklist" : "dollarsign.circle"
+        id == tasksModule ? "checklist" : id == campaignsModule ? "megaphone" : "dollarsign.circle"
     }
 
     @Published var widgets: [WidgetConfig] { didSet { save(); syncLayout(); if widgets != oldValue { reparse(changed: oldValue) } } }
@@ -614,6 +616,10 @@ final class WidgetStore: ObservableObject {
     private func syncLayout() {
         let valid = Set(widgets.map(\.id) + Self.builtinModules)
         var l = layout.filter { valid.contains($0) }
+        // Ad Campaigns goes right below Apps & Revenue for existing layouts.
+        if !l.contains(Self.campaignsModule) {
+            l.insert(Self.campaignsModule, at: (l.firstIndex(of: Self.revenueModule).map { $0 + 1 }) ?? 0)
+        }
         for id in Self.builtinModules + widgets.map(\.id) where !l.contains(id) { l.append(id) }
         if l != layout { layout = l }
     }
